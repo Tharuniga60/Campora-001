@@ -71,9 +71,3 @@ When running in demo mode, you can log in with one click as any of the sample ca
 - **Database:** Atomic JSON document store with **AES-256-GCM** encryption at rest for sensitive personal data
 - **Realtime:** Server-Sent Events (SSE) for instant deal updates, live chat, and notifications
 - **Mobile Support:** Progressive Web App (PWA) with Add to Home Screen support, plus Capacitor Android wrapper in `/mobile`
-
----
-
-## 📄 License
-
-This project is licensed under the [MIT License](LICENSE).
