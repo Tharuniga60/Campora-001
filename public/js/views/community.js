@@ -1,5 +1,4 @@
 import { html, $, icon, store, api, t, ago, avatar, empty, sheet, formSheet, toast, toastErr, campusMap, locName, loc, pickImage, banner } from '../core.js';
-import { reportSheet } from './settings.js';
 
 export async function main({ root, setTop }) {
   setTop({ back: true, title: t('Community') });
@@ -34,39 +33,63 @@ export async function map({ root, setTop }) {
   });
 }
 
+// Lost & found runs through the admin desk: finders hand items in, the desk posts them, owners claim with proof
+// and collect in person with their college ID. Members never contact each other and nobody posts "lost" items.
+const LF_STATUS = { pending: ['mari', 'Waiting for the desk'], held: ['indigo', 'At the admin desk'], ready: ['ok', 'Ready to collect'], returned: ['ok', 'Returned to owner'], rejected: ['', 'Closed'], withdrawn: ['', 'Withdrawn'] };
+const CLAIM_STATUS = { pending: ['mari', 'Claim being verified'], approved: ['ok', 'Claim approved'], rejected: ['kum', 'Claim not approved'] };
+const lfPill = (map, s) => html`<span class="pill ${map[s]?.[0] || ''}">${t(map[s]?.[1] || s)}</span>`;
+const lfThumb = (x) => (x.photo ? html`<img src="${x.photo}" alt="" style="width:72px;height:72px;border-radius:12px;object-fit:cover">` : html`<span class="ic-box" style="width:72px;height:72px;font-size:1.8rem">📦</span>`);
+
 export async function lostfound({ root, query, setTop }) {
   setTop({ back: true, title: t('Lost & Found') });
-  let tab = 'lost';
+  let tab = 'desk';
   async function load() {
-    const items = await api('/lostfound');
-    const list = items.filter((x) => x.kind === tab);
-    root.innerHTML = html`<p class="muted small mt-6">${t('Report lost items or return what you found. Contact happens through recorded in-app chat.')}</p>
-      <div class="seg mt-10">${[['lost', '😟 Lost'], ['found', '🙌 Found']].map(([k, l]) => html`<button class="${tab === k ? 'on' : ''}" data-tab="${k}">${t(l)}</button>`)}</div>
-      <button class="btn block mt-10" id="new">${icon('plus')} ${t('Report lost or found item')}</button>
-      <div class="col mt-16">${list.length ? list.map((x) => html`<div class="card pad-sm row" style="align-items:flex-start">${x.photo ? html`<img src="${x.photo}" alt="" style="width:72px;height:72px;border-radius:12px;object-fit:cover">` : html`<span class="ic-box" style="width:72px;height:72px;font-size:1.8rem">${x.kind === 'lost' ? '😟' : '🙌'}</span>`}
-        <div class="grow"><div class="row between"><b>${x.title}</b>${x.status === 'resolved' ? html`<span class="pill ok">${t('Resolved')}</span>` : ''}</div><p class="small muted">${x.desc}</p>
-          <p class="tiny faint mt-6">${icon('pin', 'ic-sm')} ${locName(x.location)} · ${x.when || ago(x.at)} · ${x.user?.name}</p>
-          <div class="row gap-6 mt-6">${x.mine ? (x.status === 'open' ? html`<button class="btn xs soft" data-resolve="${x.id}">${t('Mark resolved')}</button>` : '') : html`<button class="btn xs" data-contact="${x.id}" data-user="${x.userId}">${icon('chat')} ${x.kind === 'lost' ? t('I found it') : t('It\'s mine')}</button><button class="btn xs ghost" data-rep="${x.id}">${icon('flag')}</button>`}</div></div></div>`)
-        : empty(tab === 'lost' ? '🧸' : '📭', tab === 'lost' ? t('No lost items reported') : t('No found items reported'))}</div>`;
+    const d = await api('/lostfound');
+    const desk = locName(d.items[0]?.pickup || 'admin');
+    const card = (x, extra) => html`<div class="card pad-sm row" style="align-items:flex-start">${lfThumb(x)}
+      <div class="grow" style="min-width:0"><b>${x.title}</b>${x.desc ? html`<p class="small muted">${x.desc}</p>` : ''}
+        <p class="tiny faint mt-6">${icon('pin', 'ic-sm')} ${t('Found at')} ${locName(x.location)}${x.when ? ` · ${x.when}` : ''} · ${ago(x.at)}</p>${extra}</div></div>`;
+    const deskList = d.items.map((x) => card(x, html`<div class="row gap-6 wrap mt-6">${x.myClaim ? lfPill(CLAIM_STATUS, x.myClaim.status) : x.status === 'held' ? html`<button class="btn xs" data-claim="${x.id}">${icon('hand')} ${t('This is mine')}</button>` : lfPill(LF_STATUS, x.status)}</div>
+      ${x.myClaim?.status === 'approved' && x.status === 'ready' ? html`<p class="tiny mt-6" style="color:var(--ok)">${t('Collect it at the')} ${locName(x.pickup)} ${t('desk with your college ID.')}</p>` : ''}`));
+    const mineList = [
+      ...d.claims.map((x) => card(x, html`<div class="row gap-6 wrap mt-6"><span class="pill">${t('Your claim')}</span>${lfPill(CLAIM_STATUS, x.myClaim.status)}</div>
+        ${x.myClaim.status === 'approved' && x.status === 'ready' ? html`<p class="tiny mt-6" style="color:var(--ok)">${t('Collect it at the')} ${locName(x.pickup)} ${t('desk with your college ID.')}</p>` : ''}${x.myClaim.reason && x.myClaim.status === 'rejected' ? html`<p class="tiny faint mt-6">${x.myClaim.reason}</p>` : ''}`)),
+      ...d.mine.map((x) => card(x, html`<div class="row gap-6 wrap mt-6"><span class="pill">${t('You handed in')}</span>${lfPill(LF_STATUS, x.status)}${x.status === 'pending' ? html`<button class="btn xs ghost" data-withdraw="${x.id}">${t('Withdraw')}</button>` : ''}</div>
+        ${x.status === 'pending' ? html`<p class="tiny faint mt-6">${t('Please hand the item in at the')} ${locName(x.pickup)} ${t('desk. It is posted once the desk receives it.')}</p>` : ''}${x.rejectReason ? html`<p class="tiny faint mt-6">${x.rejectReason}</p>` : ''}`)),
+    ];
+    root.innerHTML = html`<div class="banner info mt-6">${icon('shield')}<div><b>${t('Every found item goes through the admin desk')}</b>
+        <p class="small">${t('Finders hand items in at the')} ${desk}. ${t('The desk posts them here, checks each claim and hands the item to its owner, who shows their college ID. You never deal with strangers directly — this stops fake claims.')}</p></div></div>
+      <button class="btn block mt-10" id="new">🙌 ${t('I found something')}</button>
+      <div class="seg mt-16">${[['desk', `📦 ${t('At the desk')}`], ['mine', `🗂️ ${t('My reports & claims')}`]].map(([k, l]) => html`<button class="${tab === k ? 'on' : ''}" data-tab="${k}">${l}</button>`)}</div>
+      <div class="col mt-16">${tab === 'desk'
+        ? (deskList.length ? deskList : empty('📭', t('Nothing at the desk right now'), t('Lost something? Check back here — when someone hands it in, you can claim it.')))
+        : (mineList.length ? mineList : empty('🗂️', t('Nothing yet'), t('Items you hand in and claims you make show up here.')))}</div>
+      ${tab === 'desk' ? html`<p class="tiny faint mt-16">${icon('info', 'ic-sm')} ${t('Lost items aren’t posted. The desk only shows items that were actually handed in, so nobody can bait you with a fake post.')}</p>` : ''}`;
   }
   async function newItem() {
-    const v = await formSheet({ title: t('Report an item'), fields: [
-      { name: 'kind', label: t('Type'), type: 'select', options: [{ value: 'lost', label: t('I lost something') }, { value: 'found', label: t('I found something') }], value: tab },
+    const v = await formSheet({ title: t('I found something'), intro: `${t('Thank you! Hand the item in at the')} ${locName('admin')} ${t('desk. The desk posts it once it arrives — your name is never shown.')}`, fields: [
       { name: 'title', label: t('What is it?'), required: true, placeholder: t('e.g. Black umbrella') },
-      { name: 'desc', label: t('Description'), type: 'textarea', placeholder: t('Colour, marks, where exactly… For found items, keep one detail secret to verify the owner.') },
-      { name: 'location', label: t('Where'), type: 'select', options: store.config.locations.map((l) => ({ value: l.id, label: locName(l.id) })) },
+      { name: 'desc', label: t('Description (shown to everyone)'), type: 'textarea', placeholder: t('Colour, brand, where exactly you found it') },
+      { name: 'secret', label: t('A detail only the owner would know (private)'), type: 'textarea', placeholder: t('e.g. name written inside, a sticker, what was in it — only the admin sees this') },
+      { name: 'location', label: t('Where did you find it?'), type: 'select', options: store.config.locations.map((l) => ({ value: l.id, label: locName(l.id) })) },
       { name: 'when', label: t('When'), placeholder: t('e.g. Today, 2 PM') },
-      { name: 'photo', label: t('Add a photo'), type: 'check' }], ok: t('Post') });
+      { name: 'photo', label: t('Add a photo'), type: 'check' }], ok: t('Report to admin desk') });
     if (!v) return;
-    try { if (v.photo) v.photo = await pickImage({ max: 600 }); else delete v.photo; await api('/lostfound', { method: 'POST', body: v }); tab = v.kind; toast(t('Posted'), 'ok'); load(); } catch (err) { toastErr(err); }
+    try { if (v.photo) v.photo = await pickImage({ max: 600 }); else delete v.photo; await api('/lostfound', { method: 'POST', body: v }); tab = 'mine'; toast(t('Reported — please hand it in at the admin desk'), 'ok'); load(); } catch (err) { toastErr(err); }
+  }
+  async function claim(id) {
+    const v = await formSheet({ title: t('Claim this item'), intro: t('The admin desk checks your answer against details only the finder and owner know. False claims lead to a strike.'), fields: [
+      { name: 'proof', label: t('Prove it is yours'), type: 'textarea', required: true, placeholder: t('Marks, stickers, contents, where and when you lost it…') }], ok: t('Send claim') });
+    if (!v) return;
+    await api(`/lostfound/${id}/claim`, { method: 'POST', body: v });
+    toast(t('Claim sent — the desk will verify it'), 'ok'); load();
   }
   root.addEventListener('click', async (e) => {
     const tb = e.target.closest('[data-tab]'); if (tb) { tab = tb.dataset.tab; load(); }
     if (e.target.closest('#new')) newItem();
     try {
-      const r = e.target.closest('[data-resolve]'); if (r) { await api(`/lostfound/${r.dataset.resolve}/resolve`, { method: 'POST' }); toast(t('Marked resolved 🎉'), 'ok'); load(); }
-      const c = e.target.closest('[data-contact]'); if (c) { const th = await api('/threads', { method: 'POST', body: { userId: c.dataset.user, refType: 'lostfound', refId: c.dataset.contact } }); location.hash = '#/chat/' + th.id; }
-      const rp = e.target.closest('[data-rep]'); if (rp) reportSheet('lostfound', rp.dataset.rep, t('this post'));
+      const c = e.target.closest('[data-claim]'); if (c) await claim(c.dataset.claim);
+      const w = e.target.closest('[data-withdraw]'); if (w) { await api(`/lostfound/${w.dataset.withdraw}/withdraw`, { method: 'POST' }); toast(t('Report withdrawn'), 'ok'); load(); }
     } catch (err) { toastErr(err); }
   });
   await load();

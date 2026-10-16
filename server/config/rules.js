@@ -1,5 +1,9 @@
 // Business rules: one place for fees, limits, campus geography, prohibited content and fraud heuristics.
+
 // Everything here is surfaced to users in plain language (Transparency principle).
+
+export const DEMO = process.env.DEMO !== '0'; // demo mode: one-tap personas, OTPs shown on screen
+export const DEPARTMENTS = ['CSE', 'IT', 'AI & DS', 'ECE', 'EEE', 'MECH', 'CIVIL', 'MBA', 'Science & Humanities', 'Administration'];
 
 export const CAMPUS = {
   name: process.env.CAMPUS_NAME || 'Demo Engineering College',
@@ -27,10 +31,40 @@ export const DEFAULT_SETTINGS = {
   autoReleaseHours: 48,   // delivered but receiver silent → auto release unless disputed
   maxTaskDays: 7,
   strikeSuspendDays: 7,
+  reportThreshold: 3,     // independent credible reporters that flag a vendor for admin review (never an automatic penalty)
+  reportWindowDays: 30,   // window for counting those reports
+  appealWindowDays: 14,   // days a member has to appeal a moderation action
 };
 
+// Complaint categories. vendor=true → offered when reporting a seller / task poster, their listing or task.
+export const REPORT_CATEGORIES = [
+  { id: 'pricing', en: 'Suspicious or misleading pricing', vendor: true, hint: 'A high price alone is not a violation — describe what is misleading (e.g. bait price, hidden charges, price changed after agreeing).' },
+  { id: 'fraud', en: 'Fraud or scam', vendor: true },
+  { id: 'fake_details', en: 'Fake or misleading product details', vendor: true },
+  { id: 'prohibited', en: 'Prohibited listing', vendor: true },
+  { id: 'offplatform', en: 'Asked to pay outside the app', vendor: true },
+  { id: 'no_show', en: 'No-show', vendor: true },
+  { id: 'harassment', en: 'Harassment or abuse', vendor: true },
+  { id: 'spam', en: 'Spam or wrong category', vendor: true },
+  { id: 'other', en: 'Other policy violation', vendor: true },
+];
+// Map free-text reasons from older clients / existing records onto a category.
+export function reportCategoryFor(reason = '') {
+  const r = String(reason).toLowerCase();
+  if (/pric/.test(r)) return 'pricing';
+  if (/scam|fraud/.test(r)) return 'fraud';
+  if (/fake|counterfeit|not as described|misleading/.test(r)) return 'fake_details';
+  if (/prohibit/.test(r)) return 'prohibited';
+  if (/outside|upi|off-platform/.test(r)) return 'offplatform';
+  if (/no-show|no show/.test(r)) return 'no_show';
+  if (/harass|abuse|rude/.test(r)) return 'harassment';
+  if (/spam|category/.test(r)) return 'spam';
+  return 'other';
+}
+
 export const CATEGORIES = [
-  { id: 'books', en: 'Books & Notes', ta: 'புத்தகங்கள்', icon: '📚', kgSaved: 0.6, base: 250 },
+  // freeOnly: second-hand books can't be sold under government rules — they can only be given away free
+  { id: 'books', en: 'Books & Notes', ta: 'புத்தகங்கள்', icon: '📚', kgSaved: 0.6, base: 250, freeOnly: true },
   { id: 'calculators', en: 'Calculators', ta: 'கால்குலேட்டர்', icon: '🧮', kgSaved: 0.2, base: 600 },
   { id: 'labgear', en: 'Lab Coats & Kits', ta: 'ஆய்வக உடை', icon: '🥼', kgSaved: 0.5, base: 200 },
   { id: 'cycles', en: 'Cycles', ta: 'சைக்கிள்', icon: '🚲', kgSaved: 12, base: 2200 },
@@ -40,6 +74,9 @@ export const CATEGORIES = [
   { id: 'stationery', en: 'Stationery & Drafters', ta: 'எழுதுபொருள்', icon: '📐', kgSaved: 0.3, base: 150 },
   { id: 'other', en: 'Other', ta: 'மற்றவை', icon: '📦', kgSaved: 0.5, base: 200 },
 ];
+export const LOST_FOUND_DESK = 'admin'; // found items are handed in and collected here (Admin Block)
+export const isFreeOnly = (category) => !!CATEGORIES.find((c) => c.id === category)?.freeOnly;
+export const FREE_ONLY_MSG = 'Second-hand books can’t be sold as per government rules — books & notes can only be given away for free.';
 
 export const CONDITIONS = [
   { id: 'new', en: 'Like new', ta: 'புதியது போல', factor: 0.75 },
@@ -115,6 +152,7 @@ export const PROHIBITED_SUMMARY = [
   'Medicines without a prescription',
   'Stolen, fake or counterfeit goods',
   'Doing assignments, records, exams or proxy attendance for others',
+  'Selling second-hand books or notes (give them away free instead)',
 ];
 
 // ---------- Chat safety ----------
@@ -184,6 +222,8 @@ export function istDayKey(t = Date.now()) {
 
 export const RULES_TEXT = [
   { h: 'Who can join', b: 'Only verified students and staff of the campus — one account per college ID and per phone number.' },
+  { h: 'Books are free', b: 'As per government rules, second-hand books and notes cannot be sold. You can give them away for free — no price, no fees.' },
+  { h: 'Lost & found', b: 'Found something? Hand it in at the Admin Block desk and report it in the app. The desk posts it, checks every claim and returns it to the owner, who shows their college ID. Lost items are not posted and finders are never contacted directly — this stops fake claims.' },
   { h: 'Fees', b: 'A small platform fee is added on top of the price or reward and shown before you confirm. There are no hidden charges and no paid boosting.' },
   { h: 'How payment works', b: 'Money is held safely in escrow inside the app. It is released to the seller or helper only after both of you confirm the handover with the delivery OTP.' },
   { h: 'Both must agree', b: 'Nothing starts until both sides accept. Any change to price or time after acceptance needs both to approve again.' },

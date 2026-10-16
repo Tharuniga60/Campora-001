@@ -1,6 +1,6 @@
 // App shell: router (lazy-loaded views), top bar, bottom nav, realtime stream, SOS, create menu.
-import { html, raw, $, icon, LOGO, store, api, refreshMe, applyPrefs, on, emit, toast, toastErr, sheet, avatar, t, locName, when } from './core.js';
-import { getLang } from './i18n.js';
+import { html, raw, $, icon, LOGO, store, api, demoLogin, refreshMe, applyPrefs, on, emit, toast, toastErr, sheet, avatar, t, locName, when } from './core.js';
+import { getLang } from './i18n/index.js';
 
 const ROUTES = [
   ['home', 'home', 'feed'], ['search', 'home', 'search'],
@@ -11,7 +11,7 @@ const ROUTES = [
   ['me', 'profile', 'me'], ['user/:id', 'profile', 'user'], ['wallet', 'wallet', 'main'],
   ['community', 'community', 'main'], ['lostfound', 'community', 'lostfound'], ['map', 'community', 'map'],
   ['notifications', 'notifications', 'main'], ['settings', 'settings', 'main'], ['settings/:section', 'settings', 'section'],
-  ['admin', 'admin', 'main'], ['admin/:tab', 'admin', 'main'],
+  ['admin', 'admin', 'main'], ['admin/vendor/:id', 'admin', 'vendor'], ['admin/:tab', 'admin', 'main'],
 ];
 const TABS = ['home', 'market', 'tasks', 'activity'];
 const compiled = ROUTES.map(([p, mod, fn]) => { const keys = []; const re = new RegExp('^' + p.replace(/:(\w+)/g, (_, k) => { keys.push(k); return '([^/]+)'; }) + '$'); return { re, keys, mod, fn, p }; });
@@ -91,10 +91,16 @@ async function route() {
 
 function statusBanner(view) {
   const me = store.me;
+  if (location.hash.startsWith('#/settings/moderation')) return; // that page explains the status itself
   if (me && me.status !== 'active') {
     const b = document.createElement('div');
     b.className = 'banner bad mt-6';
-    b.innerHTML = html`${icon('ban')}<div><b>${me.status === 'banned' ? t('Account banned') : t('Account suspended')}${me.suspendedUntil && me.status === 'suspended' ? ` · ${t('until')} ${when(me.suspendedUntil)}` : ''}</b><p class="small">${t('Reason')}: ${me.statusReason}. ${t('You can still view and complete active deals.')}</p></div>`;
+    b.innerHTML = html`${icon('ban')}<div><b>${me.status === 'banned' ? t('Account banned') : t('Account suspended')}${me.suspendedUntil && me.status === 'suspended' ? ` · ${t('until')} ${when(me.suspendedUntil)}` : ''}</b><p class="small">${t('Reason')}: ${String(me.statusReason).replace(/\.$/, '')}. ${t('You can still view and complete active deals.')} <a class="link" href="#/settings/moderation">${t('Details & appeal')} →</a></p></div>`;
+    view.before(b);
+  } else if (me?.restrictions?.listings) {
+    const r = me.restrictions.listings, b = document.createElement('div');
+    b.className = 'banner warn mt-6';
+    b.innerHTML = html`${icon('alert')}<div><b>${t('Listings restricted')}${r.until ? ` · ${t('until')} ${when(r.until)}` : ''}</b><p class="small">${t('Reason')}: ${String(r.reason).replace(/\.$/, '')}. ${t('You can still buy and finish active deals.')} <a class="link" href="#/settings/moderation">${t('Details & appeal')} →</a></p></div>`;
     view.before(b);
   }
 }
@@ -114,7 +120,7 @@ function createMenu() {
     ['🧾', 'Post a task', 'Print, submit, queue…', '#/post/task'],
     ['📦', 'Pick & Drop', 'Parcel, lunch, books', '#/post/pickdrop'],
     ['🍱', 'Group run', 'Carry orders for many', '#/post/group'],
-    ['🔎', 'Lost & Found', 'Report or return', '#/lostfound?new=1'],
+    ['🔎', 'Lost & Found', 'Hand in a found item', '#/lostfound?new=1'],
   ];
   sheet(html`<h2>${t('What do you need?')}</h2><p class="muted small">${t('Every deal is agreed by both sides and paid through escrow.')}</p>
     <div class="create-grid">${opts.map(([e, a, b, h]) => html`<button data-h="${h}"><em>${e}</em><b>${t(a)}</b><span>${t(b)}</span></button>`)}</div>`.s, {
@@ -167,7 +173,7 @@ function renderSide() {
       <p class="tiny faint mt-10">${t('Open on a phone (same Wi-Fi)')}: <b>${location.host}</b></p>` : ''}`;
   side.onclick = async (e) => {
     const b = e.target.closest('[data-demo]'); if (!b) return;
-    try { const d = await api('/auth/demo', { method: 'POST', body: { userId: b.dataset.demo } }); store.token = d.token; localStorage.setItem('cl.token', d.token); store.me = d.me; applyPrefs(); frame(); connect(); location.hash = '#/home'; route(); toast(`${t('Now viewing as')} ${d.me.name}`, 'ok'); } catch (err) { toastErr(err); }
+    try { const d = await demoLogin(b.dataset.demo); store.token = d.token; localStorage.setItem('cl.token', d.token); store.me = d.me; applyPrefs(); frame(); connect(); location.hash = '#/home'; route(); toast(`${t('Now viewing as')} ${d.me.name}`, 'ok'); } catch (err) { toastErr(err); }
   };
 }
 
@@ -217,6 +223,12 @@ window.addEventListener('online', setOffline); window.addEventListener('offline'
   }
   if (store.token) { frame(); connect(); }
   route();
-  if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('/sw.js').catch(() => {});
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+    // an updated worker took over → reload once so this page runs the new code (not on the very first install)
+    const hadWorker = !!navigator.serviceWorker.controller;
+    let reloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadWorker && !reloaded) { reloaded = true; location.reload(); } });
+    navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch(() => {});
+  }
 })();
 export { route };

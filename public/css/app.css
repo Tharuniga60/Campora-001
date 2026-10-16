@@ -362,3 +362,6 @@ body.in-chat .nav { display: none; }
 .chat { padding-bottom: 130px; }
 .mb { margin-bottom: 4px; }
 .persona-grid > * { min-width: 0; } .persona b, .persona .tiny { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* the hidden attribute always wins over component display rules */
+[hidden] { display: none !important; }

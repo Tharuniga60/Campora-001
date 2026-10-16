@@ -1,5 +1,5 @@
 // Core: rendering helpers, API client, state, shared UI components. No framework — tiny & fast.
-import { t, setLang, getLang } from './i18n.js';
+import { t, setLang, getLang } from './i18n/index.js';
 export { t };
 
 // ---------- safe templating
@@ -82,6 +82,18 @@ export async function api(path, { method = 'GET', body } = {}) {
   if (res.status === 401 && store.token && !path.startsWith('/auth')) { emit('logout'); }
   if (!res.ok) { const e = new Error(data.error || 'Request failed'); e.status = res.status; e.data = data; throw e; }
   return data;
+}
+// One-tap demo login. Re-seeding the demo (npm run reset) gives every persona a new id, so a page opened
+// before the reset holds stale ids — on "not found", reload the persona list and retry the same person by name.
+export async function demoLogin(userId) {
+  try { return await api('/auth/demo', { method: 'POST', body: { userId } }); } catch (err) {
+    if (err.status !== 404) throw err;
+    const old = store.config.demoUsers.find((u) => u.id === userId);
+    store.config = await api('/config');
+    const fresh = old && store.config.demoUsers.find((u) => u.name === old.name);
+    if (!fresh) throw err;
+    return api('/auth/demo', { method: 'POST', body: { userId: fresh.id } });
+  }
 }
 export async function refreshMe() {
   if (!store.token) return null;

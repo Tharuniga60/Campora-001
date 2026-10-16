@@ -8,7 +8,7 @@
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
     "reset": "node server/index.js --reset --seed-only",
-    "test": "node --test tests/api.test.js"
+    "test": "node --test tests/api.test.js tests/sections.test.js tests/moderation.test.js"
   },
   "engines": { "node": ">=18.17" },
   "license": "MIT"

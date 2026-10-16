@@ -5,13 +5,13 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 export const DB_FILE = process.env.DB_FILE || path.join(ROOT, 'data', 'db.json');
 
 export const COLLECTIONS = [
   'users', 'sessions', 'otps', 'listings', 'tasks', 'deals', 'threads', 'messages',
   'notifications', 'reports', 'reviews', 'lostfound', 'announcements', 'ledger',
-  'audit', 'sos', 'flags',
+  'audit', 'sos', 'flags', 'modlog', 'appeals',
 ];
 
 export function emptyDb() {

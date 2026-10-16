@@ -59,7 +59,7 @@ When running in demo mode, you can log in with one click as any of the sample ca
 |---|---|
 | `npm start` | Launches the server (auto-seeds demo campus data on initial run) |
 | `npm run dev` | Runs the server in watch mode with automatic restart on file changes |
-| `npm test` | Runs the full 9-step automated end-to-end API & escrow test suite |
+| `npm test` | Runs the end-to-end API, per-section and moderation test suites (48 tests) |
 | `npm run reset` | Resets and re-seeds the sample campus database |
 
 ---
@@ -71,3 +71,58 @@ When running in demo mode, you can log in with one click as any of the sample ca
 - **Database:** Atomic JSON document store with **AES-256-GCM** encryption at rest for sensitive personal data
 - **Realtime:** Server-Sent Events (SSE) for instant deal updates, live chat, and notifications
 - **Mobile Support:** Progressive Web App (PWA) with Add to Home Screen support, plus Capacitor Android wrapper in `/mobile`
+
+---
+
+## 📁 Project Structure
+
+```
+campora/
+├── server/                     # Node.js API + static file server (no dependencies)
+│   ├── index.js                # Entry point: load/seed DB, migrate, listen, background jobs
+│   ├── app.js                  # Builds the HTTP server and loads every route module
+│   ├── config/
+│   │   └── rules.js            # Business rules: fees, limits, campus map, categories, prohibited items
+│   ├── core/                   # Infrastructure — knows nothing about campus features
+│   │   ├── db.js               # JSON document store, atomic writes, encryption at rest
+│   │   ├── http.js             # Router, rate limiting, body parsing, static files, security headers
+│   │   ├── realtime.js         # Server-Sent Events streams
+│   │   ├── util.js             # Errors, time units, coercion helpers, current settings
+│   │   └── validate.js         # Shared input validation (photos, deadlines)
+│   ├── services/               # Business logic shared by routes (no HTTP here)
+│   │   ├── users.js            # Sessions, profiles, trust score, badges, strikes, limits
+│   │   ├── wallet.js           # Ledger and escrow (hold / refund / release)
+│   │   ├── deals.js            # Deal lifecycle, actions and views
+│   │   ├── catalog.js          # Listing & task views, fair-rotation feed ranking
+│   │   ├── chat.js             # Threads and system messages
+│   │   ├── moderation.js       # Reports, credibility, vendor risk, actions, restrictions, appeals, migration
+│   │   ├── notifications.js    # Notifications, audit log, auto-flags
+│   │   ├── community.js        # Campus impact numbers
+│   │   └── jobs.js             # Expiries, auto-release, suspension/restriction end
+│   ├── routes/                 # One file per feature; each registers its /api/* endpoints
+│   │   ├── auth.js  users.js  feed.js  listings.js  tasks.js  deals.js
+│   │   ├── chat.js  notifications.js  safety.js  wallet.js  community.js
+│   │   └── admin.js  admin-moderation.js
+│   └── demo/
+│       └── seed.js             # Demo campus: personas, listings, deals, reports
+├── public/                     # PWA served as-is (no build step)
+│   ├── index.html  manifest.webmanifest  sw.js
+│   ├── css/app.css             # Design system
+│   ├── js/
+│   │   ├── app.js              # Shell: router, top bar, nav, realtime, SOS
+│   │   ├── core.js             # Templating, API client, state, shared components
+│   │   ├── i18n/               # index.js (t, setLang) + ta.js (Tamil strings)
+│   │   └── views/              # One module per screen, lazy-loaded by the router
+│   ├── fonts/  icons/
+│   └── img/items/              # Demo listing photos + CREDITS.md
+├── tests/
+│   ├── helpers/server.js       # Boots a seeded server on a free port + API client
+│   ├── api.test.js             # Escrow, mutual acceptance, OTP, fairness, fraud checks
+│   ├── sections.test.js        # One test per application section
+│   └── moderation.test.js      # Reporting, review, restrictions, appeals
+├── mobile/                     # Capacitor Android wrapper (points at the running server)
+├── docs/                       # Pitch and product notes
+└── data/                       # Runtime database (git-ignored, created on first start)
+```
+
+**Where new code goes:** a new API endpoint → the matching file in `server/routes/`; logic used by more than one route → `server/services/`; a new limit or fee → `server/config/rules.js`; a new screen → `public/js/views/` plus a line in the `ROUTES` table in `public/js/app.js`. Dependencies point one way: `routes → services → core/config`.

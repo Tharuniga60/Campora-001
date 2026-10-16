@@ -1,24 +1,14 @@
 // Demo seed: a living campus with history, so trust scores, analytics and feeds are meaningful from minute one.
 import crypto from 'node:crypto';
-import { emptyDb, replace, db, uid, encrypt } from './db.js';
-import { makeUser } from './app.js';
-import { CATEGORIES } from './rules.js';
+import { emptyDb, replace, db, uid, encrypt } from '../core/db.js';
+import { makeUser } from '../services/users.js';
 
 const H = 3600e3, DAY = 24 * H;
 const rnd = (a, b) => a + crypto.randomInt(b - a + 1);
 const pick = (arr) => arr[crypto.randomInt(arr.length)];
 
-const PALETTE = {
-  books: ['#F3D9A4', '#C9823A'], calculators: ['#CFE3DC', '#2F7A64'], labgear: ['#E6EEF7', '#5A7FA8'], cycles: ['#F6D3C4', '#C0583A'],
-  gadgets: ['#DCD4F0', '#6B4FB0'], hostel: ['#F2E2C6', '#A87A3C'], sports: ['#D7EBC9', '#4E8A34'], stationery: ['#F5E6B8', '#B08A12'], other: ['#E4E1DA', '#77705F'],
-};
-export function itemArt(category, emoji, label, variant = 0) {
-  const [bg, fg] = PALETTE[category] || PALETTE.other;
-  const dots = [];
-  for (let y = 40; y < 600; y += 56) for (let x = 40; x < 600; x += 56) dots.push(`<circle cx="${x + (variant % 2) * 28}" cy="${y}" r="3" fill="${fg}" opacity=".18"/>`);
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600"><defs><radialGradient id="g" cx=".3" cy=".25" r=".9"><stop offset="0" stop-color="#fff" stop-opacity=".7"/><stop offset="1" stop-color="${bg}"/></radialGradient></defs><rect width="600" height="600" fill="${bg}"/><rect width="600" height="600" fill="url(#g)"/>${dots.join('')}<circle cx="300" cy="285" r="170" fill="#fff" opacity=".45"/><text x="300" y="350" font-size="190" text-anchor="middle" font-family="Apple Color Emoji,Segoe UI Emoji,Noto Color Emoji,sans-serif">${emoji}</text><text x="300" y="540" font-size="34" font-weight="700" text-anchor="middle" fill="${fg}" font-family="Arial,sans-serif" letter-spacing="2">${label.toUpperCase()}</text></svg>`;
-  return 'data:image/svg+xml;base64,' + Buffer.from(svg).toString('base64');
-}
+// Demo listing photos: real, freely licensed images bundled in public/img/items (see CREDITS.md there).
+const img = (...names) => names.map((n) => `/img/items/${n}.jpg`);
 
 export function seed() {
   const d = emptyDb();
@@ -55,15 +45,15 @@ export function seed() {
 
   // ---------------------------------------------------------------- historical marketplace + tasks (paid)
   const histItems = [
-    ['books', '📘', 'Engineering Physics textbook', 180, 'good'], ['books', '📗', 'Discrete Maths (Rosen) 7th ed', 320, 'good'],
-    ['calculators', '🧮', 'Casio fx-82MS calculator', 350, 'fair'], ['labgear', '🥼', 'Lab coat — size L', 150, 'good'],
-    ['stationery', '📐', 'Mini drafter + set squares', 260, 'good'], ['gadgets', '🎧', 'Wired earphones (boAt)', 220, 'good'],
-    ['hostel', '🪣', 'Bucket & mug set', 90, 'fair'], ['sports', '🏸', 'Badminton racket (Yonex)', 450, 'good'],
-    ['books', '📕', 'Signals & Systems textbook', 240, 'fair'], ['hostel', '💡', 'Study table lamp', 260, 'good'],
-    ['cycles', '🚲', 'Hero Sprint cycle', 2100, 'fair'], ['gadgets', '🔌', 'Extension board 4-socket', 180, 'good'],
-    ['books', '📒', 'GATE CSE previous papers', 200, 'good'], ['labgear', '🥽', 'Safety goggles + gloves', 80, 'new'],
-    ['stationery', '🖊️', 'Engineering drawing kit', 220, 'good'], ['calculators', '🧮', 'Casio fx-991MS', 520, 'good'],
-    ['hostel', '🛏️', 'Pillow + bedsheet set', 0, 'good'], ['books', '📚', 'First-year notes bundle', 0, 'fair'],
+    ['books', ['physics-textbook'], 'Engineering Physics textbook', 0, 'good'], ['books', ['maths-textbook'], 'Discrete Maths (Rosen) 7th ed', 0, 'good'],
+    ['calculators', ['casio-fx82ms'], 'Casio fx-82MS calculator', 350, 'fair'], ['labgear', ['lab-coat'], 'Lab coat — size L', 150, 'good'],
+    ['stationery', ['set-squares'], 'Mini drafter + set squares', 260, 'good'], ['gadgets', ['earphones'], 'Wired earphones (boAt)', 220, 'good'],
+    ['hostel', ['bucket'], 'Bucket & mug set', 90, 'fair'], ['sports', ['badminton-racket'], 'Badminton racket (Yonex)', 450, 'good'],
+    ['books', ['textbooks-stack'], 'Signals & Systems textbook', 0, 'fair'], ['hostel', ['desk-lamp'], 'Study table lamp', 260, 'good'],
+    ['cycles', ['roadster-cycle'], 'Hero Sprint cycle', 2100, 'fair'], ['gadgets', ['extension-board'], 'Extension board 4-socket', 180, 'good'],
+    ['books', ['exam-papers'], 'GATE CSE previous papers', 0, 'good'], ['labgear', ['safety-goggles'], 'Safety goggles + gloves', 80, 'new'],
+    ['stationery', ['drawing-kit'], 'Engineering drawing kit', 220, 'good'], ['calculators', ['casio-fx991ms'], 'Casio fx-991MS', 520, 'good'],
+    ['hostel', ['pillow-bedsheet'], 'Pillow + bedsheet set', 0, 'good'], ['books', ['notebooks'], 'First-year notes bundle', 0, 'fair'],
   ];
   const taskHist = [
     ['task', 'Print 40 pages at Xerox shop', 25], ['pickdrop', 'Bring parcel from Post Room', 30], ['task', 'Submit signed form at Admin Block', 20],
@@ -112,10 +102,10 @@ export function seed() {
     return deal;
   }
 
-  histItems.forEach(([cat, em, title, price, cond], i) => {
+  histItems.forEach(([cat, photos, title, price, cond], i) => {
     const seller = U[sellers[i % sellers.length]], buyer = U[buyers[i % buyers.length]];
     const at = now - rnd(3, 55) * DAY;
-    const l = { id: uid('l'), sellerId: seller.id, title, desc: 'Sold via CampusLoop.', category: cat, condition: cond, price, photos: [itemArt(cat, em, title.split(' ')[0], i)], meetPoint: pick(['library', 'canteen', 'admin', 'hosgate']), status: 'sold', createdAt: at - 2 * DAY, views: rnd(5, 40), priceHistory: [{ price, at: at - 2 * DAY }] };
+    const l = { id: uid('l'), sellerId: seller.id, title, desc: 'Sold via CampusLoop.', category: cat, condition: cond, price, photos: img(...photos), meetPoint: pick(['library', 'canteen', 'admin', 'hosgate']), status: 'sold', createdAt: at - 2 * DAY, views: rnd(5, 40), priceHistory: [{ price, at: at - 2 * DAY }] };
     db.listings.push(l);
     histDeal({ type: 'buy', ref: l.id, title, payer: buyer, payee: seller, amount: price, at, meet: l.meetPoint });
   });
@@ -130,26 +120,27 @@ export function seed() {
 
   // ---------------------------------------------------------------- live marketplace
   const live = [
-    ['priya', 'calculators', '🧮', 'Casio fx-991ES Plus calculator', 'Used for 2 semesters, all functions work. Cover included. Perfect for M1/M2 exams.', 650, 'good', 'library', 30 * H],
-    ['priya', 'books', '📘', 'Data Structures textbook + solved notes', 'Clean copy, a few pencil marks. Comes with my handwritten solved problems for Unit 3–5.', 280, 'good', 'library', 5 * H],
-    ['sneha', 'gadgets', '⌨️', 'Mechanical keyboard (blue switches)', 'Clicky and great for coding. Moving out after placements.', 1200, 'good', 'canteen', 2 * DAY],
-    ['sneha', 'hostel', '🛏️', 'Foldable mattress + pillow', 'Thick foam mattress, washed cover. Pick up from Girls Hostel lobby.', 600, 'fair', 'hosgate', 3 * DAY],
-    ['fathima', 'stationery', '📐', 'Omega mini drafter', 'Smooth scale, no wobble. First-years need this for Engineering Graphics!', 350, 'new', 'admin', 9 * H],
-    ['vignesh', 'gadgets', '🔋', 'Arduino Uno + sensor kit', 'Uno board, breadboard, 15 sensors, jumper wires. Great for mini projects.', 900, 'good', 'ece', 4 * DAY],
-    ['karthik', 'cycles', '🚲', 'Btwin MTB cycle — 21 gears', 'Serviced last month, new tyres. Lock included.', 3800, 'good', 'park', 6 * DAY],
-    ['lakshmi', 'labgear', '🥼', 'Lab coats (M & L) — set of 2', 'Barely used, washed and ironed.', 220, 'new', 'admin', 20 * H],
-    ['harish', 'gadgets', '🎧', 'JBL Tune 510BT headphones', 'Bluetooth, 30 hr battery. Original box and bill.', 1350, 'good', 'canteen', 2 * H],
-    ['divya', 'books', '📗', 'Python programming + C notes (printed)', 'Spiral-bound printed notes, 180 pages.', 120, 'good', 'xerox', 12 * H],
-    ['rahul', 'sports', '⚽', 'Football (size 5) — Nivia', 'Good grip, slightly scuffed.', 300, 'fair', 'sports', 1 * H],
-    ['irfan', 'hostel', '🧺', 'Electric kettle 1L', 'Works perfectly. Hostel-approved model.', 450, 'good', 'hosgate', 26 * H],
-    ['fathima', 'books', '📚', 'FREE: Semester 1 & 2 question banks', 'Giving away for free — someone please use them!', 0, 'fair', 'library', 4 * H],
-    ['sneha', 'hostel', '🪴', 'FREE: Desk plant + pot', 'Money plant in a ceramic pot. Needs a new home.', 0, 'good', 'hosgate', 7 * H],
-    ['nandhini', 'stationery', '🖍️', 'Whiteboard + markers', 'A3 size whiteboard, 4 markers & duster.', 250, 'good', 'admin', 36 * H],
-    ['arjun', 'sports', '🏏', 'Cricket bat (Kashmir willow)', 'Knocked in, good for tennis-ball cricket.', 700, 'fair', 'sports', 3 * DAY],
+    ['priya', 'calculators', ['casio-fx991es', 'casio-fx991es-2'], 'Casio fx-991ES Plus calculator', 'Used for 2 semesters, all functions work. Cover included. Perfect for M1/M2 exams.', 650, 'good', 'library', 30 * H],
+    ['priya', 'books', ['c-textbook', 'cs-books'], 'FREE: Data Structures textbook + solved notes', 'Clean copy, a few pencil marks. Comes with my handwritten solved problems for Unit 3–5. Free to a junior who needs it.', 0, 'good', 'library', 5 * H],
+    ['sneha', 'gadgets', ['mech-keyboard'], 'Mechanical keyboard (blue switches)', 'Clicky and great for coding. Moving out after placements.', 1200, 'good', 'canteen', 2 * DAY],
+    ['sneha', 'hostel', ['mattress', 'mattress-2'], 'Foldable mattress + pillow', 'Thick foam mattress, washed cover. Pick up from Girls Hostel lobby.', 600, 'fair', 'hosgate', 3 * DAY],
+    ['fathima', 'stationery', ['drafting-board', 'drawing-kit-2'], 'Omega mini drafter', 'Smooth scale, no wobble. First-years need this for Engineering Graphics!', 350, 'new', 'admin', 9 * H],
+    ['vignesh', 'gadgets', ['arduino-uno', 'arduino-kit'], 'Arduino Uno + sensor kit', 'Uno board, breadboard, 15 sensors, jumper wires. Great for mini projects.', 900, 'good', 'ece', 4 * DAY],
+    ['karthik', 'cycles', ['mtb-cycle'], 'Btwin MTB cycle — 21 gears', 'Serviced last month, new tyres. Lock included.', 3800, 'good', 'park', 6 * DAY],
+    ['lakshmi', 'labgear', ['lab-coats', 'lab-coat'], 'Lab coats (M & L) — set of 2', 'Barely used, washed and ironed.', 220, 'new', 'admin', 20 * H],
+    ['harish', 'gadgets', ['jbl-headphones'], 'JBL Tune 510BT headphones', 'Bluetooth, 30 hr battery. Original box and bill.', 1350, 'good', 'canteen', 2 * H],
+    ['divya', 'books', ['spiral-notes'], 'FREE: Python programming + C notes (printed)', 'Spiral-bound printed notes, 180 pages. Passing them on for free.', 0, 'good', 'xerox', 12 * H],
+    ['rahul', 'sports', ['football'], 'Football (size 5) — Nivia', 'Good grip, slightly scuffed.', 300, 'fair', 'sports', 1 * H],
+    ['irfan', 'hostel', ['kettle'], 'Electric kettle 1L', 'Works perfectly. Hostel-approved model.', 450, 'good', 'hosgate', 26 * H],
+    ['fathima', 'books', ['question-banks'], 'FREE: Semester 1 & 2 question banks', 'Giving away for free — someone please use them!', 0, 'fair', 'library', 4 * H],
+    ['sneha', 'hostel', ['money-plant', 'money-plant-2'], 'FREE: Desk plant + pot', 'Money plant in a ceramic pot. Needs a new home.', 0, 'good', 'hosgate', 7 * H],
+    ['nandhini', 'stationery', ['whiteboard-markers', 'markers'], 'Whiteboard + markers', 'A3 size whiteboard, 4 markers & duster.', 250, 'good', 'admin', 36 * H],
+    ['arjun', 'sports', ['cricket-bat'], 'Cricket bat (Kashmir willow)', 'Knocked in, good for tennis-ball cricket.', 700, 'fair', 'sports', 3 * DAY],
+    ['priya', 'stationery', ['drawing-kit'], 'Engineering drawing kit (compass + set squares)', 'Complete kit for Engineering Graphics, nothing missing.', 240, 'good', 'library', 8 * H],
   ];
   const L = {};
-  live.forEach(([who, cat, em, title, desc, price, cond, meet, age], i) => {
-    const l = { id: uid('l'), sellerId: U[who].id, title, desc, category: cat, condition: cond, price, photos: [itemArt(cat, em, title.split(' ')[0].replace(':', ''), i), itemArt(cat, em, CATEGORIES.find((c) => c.id === cat).en.split(' ')[0], i + 1)], meetPoint: meet, status: 'active', createdAt: now - age, views: rnd(3, 60), priceHistory: [{ price, at: now - age }] };
+  live.forEach(([who, cat, photos, title, desc, price, cond, meet, age], i) => {
+    const l = { id: uid('l'), sellerId: U[who].id, title, desc, category: cat, condition: cond, price, photos: img(...photos), meetPoint: meet, status: 'active', createdAt: now - age, views: rnd(3, 60), priceHistory: [{ price, at: now - age }] };
     db.listings.push(l); L[i] = l;
   });
   L[8].priceReview = true; // headphones — reported as possibly fake
@@ -198,15 +189,15 @@ export function seed() {
   // 1) Kavya ↔ Priya: calculator, accepted — ready for OTP handover demo
   const d1 = liveDeal({ type: 'buy', ref: L[0].id, title: L[0].title, payer: U.kavya, payee: U.priya, amount: 600, status: 'accepted', meet: 'library', offeredBy: U.kavya.id, note: 'Can we meet at the Library at 4?', minsAgo: 90 });
   L[0].status = 'reserved';
-  // 2) Rahul → Priya: offer on DS book (Priya can accept/decline)
-  liveDeal({ type: 'buy', ref: L[1].id, title: L[1].title, payer: U.rahul, payee: U.priya, amount: 250, status: 'offered', meet: 'library', offeredBy: U.rahul.id, note: 'Would you take ₹250? First-year here 🙏', minsAgo: 25 });
+  // 2) Rahul → Priya: request for the free DS book (Priya can accept/decline)
+  liveDeal({ type: 'buy', ref: L[1].id, title: L[1].title, payer: U.rahul, payee: U.priya, amount: 0, status: 'offered', meet: 'library', offeredBy: U.rahul.id, note: 'Could I have this? First-year here 🙏', minsAgo: 25 });
   // 3) Arjun helping Kavya: parcel pick-drop in progress with live tracking
   const t0 = T[0]; t0.offers.push({ helperId: U.arjun.id, note: 'Heading to the gate now.', at: now - 40 * 60000 }); t0.status = 'assigned'; t0.assignedAt = now - 35 * 60000;
   const d3 = liveDeal({ type: 'pickdrop', ref: t0.id, title: t0.title, payer: U.kavya, payee: U.arjun, amount: t0.reward, status: 'in_progress', meet: 'gate', offeredBy: U.arjun.id, fromTask: true, minsAgo: 40 });
   d3.fee = t0.fee; d3.total = t0.total; d3.escrow = t0.escrow; t0.escrow = 0; t0.dealId = d3.id;
   d3.tracking = { stage: 'picked_up', at: now - 8 * 60000, mapX: 500, mapY: 600, history: [{ stage: 'started', at: now - 20 * 60000 }, { stage: 'picked_up', at: now - 8 * 60000 }] };
   // 4) Dispute: Vignesh bought Fathima's ... (seller says delivered, buyer says not)
-  const dl = { id: uid('l'), sellerId: U.fathima.id, title: 'Scientific calculator (Casio fx-100MS)', desc: 'Works fine.', category: 'calculators', condition: 'fair', price: 400, photos: [itemArt('calculators', '🧮', 'Casio', 3)], meetPoint: 'admin', status: 'reserved', createdAt: now - 3 * DAY, views: 12, priceHistory: [{ price: 400, at: now - 3 * DAY }] };
+  const dl = { id: uid('l'), sellerId: U.fathima.id, title: 'Scientific calculator (Casio fx-100MS)', desc: 'Works fine.', category: 'calculators', condition: 'fair', price: 400, photos: img('casio-fx100ms'), meetPoint: 'admin', status: 'reserved', createdAt: now - 3 * DAY, views: 12, priceHistory: [{ price: 400, at: now - 3 * DAY }] };
   db.listings.push(dl);
   const d4 = liveDeal({ type: 'buy', ref: dl.id, title: dl.title, payer: U.vignesh, payee: U.fathima, amount: 400, status: 'disputed', meet: 'admin', offeredBy: U.vignesh.id, minsAgo: 26 * 60 });
   const rep = { id: uid('r'), kind: 'dispute', reporterId: U.vignesh.id, targetType: 'deal', targetId: d4.id, targetUserId: U.fathima.id, reason: 'Item not as described', details: 'The display has missing segments — the listing said it works fine. Seller marked delivered but I want a refund.', dealId: d4.id, status: 'open', createdAt: now - 20 * H, dueAt: now + 4 * H, decision: null };
@@ -224,7 +215,7 @@ export function seed() {
   msg(d3.threadId, null, 'Deal accepted by both sides. ₹26 is safe in escrow.', 35);
   msg(d3.threadId, U.arjun, 'Picked up your parcel from the gate, heading to Library now 🏃', 8);
   const rahulDeal = db.deals.find((x) => x.payerId === U.rahul.id);
-  msg(rahulDeal.threadId, U.rahul, 'Would you take ₹250? First-year here 🙏', 25);
+  msg(rahulDeal.threadId, U.rahul, 'Could I have this? First-year here 🙏', 25);
   msg(d4.threadId, U.vignesh, 'The display is missing segments, this is not what was listed.', 21 * 60);
   msg(d4.threadId, U.fathima, 'It was working when I handed it over!', 20.5 * 60);
   msg(d4.threadId, null, 'Vignesh Murugan raised a dispute: “Item not as described”. Escrow is frozen.', 20 * 60);
@@ -239,31 +230,43 @@ export function seed() {
   db.messages.push({ id: msgId, threadId: enquiry.id, from: U.karthik.id, text: 'Yes. Pay ••••• directly and skip the app fee, I\'ll give ₹200 off', at: now - 4 * H, masked: true });
   db.reports.push({ id: uid('r'), kind: 'report', reporterId: U.kavya.id, targetType: 'message', targetId: msgId, targetUserId: U.karthik.id, reason: 'Asked to pay outside the app', details: 'Seller asked me to pay on UPI directly to avoid the app.', status: 'open', createdAt: now - 3.5 * H, dueAt: now + 20.5 * H, decision: null });
   db.reports.push({ id: uid('r'), kind: 'report', reporterId: U.irfan.id, targetType: 'listing', targetId: L[8].id, targetUserId: U.harish.id, reason: 'Possibly fake / counterfeit', details: 'Same photos appear on a reseller page; price too low for originals.', status: 'open', createdAt: now - 1 * H, dueAt: now + 23 * H, decision: null });
+  // two more independent complaints about the same headphones → vendor crosses the review threshold (investigation, not a penalty)
+  const sig = { interacted: false, newAccount: false, massReporting: false, lowAccuracy: false, coordinated: false, credible: true };
+  db.reports.push({ id: uid('r'), kind: 'report', reporterId: U.sneha.id, targetType: 'listing', targetId: L[8].id, targetUserId: U.harish.id, vendorId: U.harish.id, productId: L[8].id, category: 'fake_details', reason: 'Fake or misleading product details', details: 'Box in the photo is a different model from the one described; serial sticker missing.', status: 'open', createdAt: now - 50 * 60000, dueAt: now + 23 * H, decision: null, notes: [], signals: sig });
+  db.reports.push({ id: uid('r'), kind: 'report', reporterId: U.divya.id, targetType: 'user', targetId: U.harish.id, targetUserId: U.harish.id, vendorId: U.harish.id, productId: null, category: 'pricing', reason: 'Suspicious or misleading pricing', details: 'Listed at ₹1350 but asked me for ₹1600 in chat after I offered.', status: 'open', createdAt: now - 20 * 60000, dueAt: now + 23.5 * H, decision: null, notes: [], signals: { ...sig, interacted: true } });
+  db.flags.push({ id: uid('f'), userId: U.harish.id, kind: 'reports_threshold', detail: '3 independent credible reports in 30 days (threshold 3). Investigate before acting — reports alone do not prove a violation.', at: now - 20 * 60000, status: 'open', count: 1 });
   db.flags.push({ id: uid('f'), userId: U.karthik.id, kind: 'offplatform', detail: 'Shared payment/contact details in chat: “pay on my UPI directly and skip the app fee”', at: now - 4 * H, status: 'open', count: 2 });
   db.flags.push({ id: uid('f'), userId: U.harish.id, kind: 'price', detail: 'Price of “JBL Tune 510BT headphones” changed 4 times in 24h', at: now - 6 * H, status: 'open', count: 1 });
   db.flags.push({ id: uid('f'), userId: U.harish.id, kind: 'cancellations', detail: '3 cancellations in the last 7 days', at: now - 30 * H, status: 'open', count: 1 });
-  U.karthik.strikes.push({ reason: 'No-show at agreed meeting point (Sept)', by: U.admin.id, at: now - 25 * DAY });
+  const kStrike = { id: uid('sk'), reason: 'No-show at agreed meeting point (Sept)', by: U.admin.id, at: now - 25 * DAY };
+  U.karthik.strikes.push(kStrike);
+  db.modlog.push({ id: uid('ma'), userId: U.karthik.id, by: U.admin.id, action: 'strike', reason: kStrike.reason, reportId: null, at: kStrike.at, meta: { strikeId: kStrike.id, level: 'warning' }, rescinded: null, correction: null });
   // resolved report history (for SLA metric)
-  for (let i = 0; i < 6; i++) {
+  // fixed outcomes (not random) so Kavya stays a credible reporter — a mostly-dismissed history would mark her reports unreliable
+  for (const [kind, action] of [['dispute', 'refund'], ['report', 'strike'], ['report', 'warn'], ['dispute', 'release'], ['report', 'dismiss'], ['report', 'strike']]) {
     const at = now - rnd(3, 40) * DAY;
-    db.reports.push({ id: uid('r'), kind: i % 3 ? 'report' : 'dispute', reporterId: U.kavya.id, targetType: 'user', targetId: U.harish.id, targetUserId: U.harish.id, reason: pick(['No-show', 'Rude behaviour', 'Item not as described']), details: '', status: 'resolved', createdAt: at, dueAt: at + DAY, decision: { action: pick(['dismiss', 'strike', 'refund']), reason: 'Reviewed chat records and timeline; decision explained to both parties.', by: U.admin.id, at: at + rnd(2, 20) * H } });
+    db.reports.push({ id: uid('r'), kind, reporterId: U.kavya.id, targetType: 'user', targetId: U.harish.id, targetUserId: U.harish.id, reason: pick(['No-show', 'Rude behaviour', 'Item not as described']), details: '', status: action === 'dismiss' ? 'dismissed' : 'resolved', createdAt: at, dueAt: at + DAY, decision: { action, reason: 'Reviewed chat records and timeline; decision explained to both parties.', by: U.admin.id, at: at + rnd(2, 20) * H } });
   }
   db.audit.push({ id: uid('a'), by: U.admin.id, action: 'strike:warning', target: U.karthik.id, reason: 'No-show at agreed meeting point (Sept)', at: now - 25 * DAY });
 
   // ---------------------------------------------------------------- community
   db.announcements.push({ id: uid('n'), title: 'Exam week: Library meeting point open till 10 PM', body: 'Handover desks at the Central Library entrance are staffed and CCTV-covered till 10 PM during exam week.', kind: 'info', pinned: true, at: now - 10 * H, by: U.admin.id });
   db.announcements.push({ id: uid('n'), title: 'Never pay outside the app', body: 'Escrow only protects you when you pay inside CampusLoop. Report anyone who asks for direct UPI.', kind: 'alert', pinned: false, at: now - 3 * DAY, by: U.admin.id });
-  db.lostfound.push({ id: uid('x'), userId: U.kavya.id, kind: 'lost', title: 'Blue steel water bottle (Milton)', desc: 'Name sticker “KR” on the cap. Lost near Library reading hall.', location: 'library', photo: itemArt('other', '🧴', 'Bottle', 1), at: now - 6 * H, status: 'open', when: 'Today morning' });
-  db.lostfound.push({ id: uid('x'), userId: U.irfan.id, kind: 'found', title: 'ID card holder with lanyard', desc: 'Red lanyard, found on a canteen table. Handed to canteen counter — describe it to claim.', location: 'canteen', photo: itemArt('other', '🪪', 'ID card', 2), at: now - 3 * H, status: 'open', when: 'Lunch time' });
-  db.lostfound.push({ id: uid('x'), userId: U.sneha.id, kind: 'found', title: 'Black umbrella', desc: 'Left at CSE block seminar hall.', location: 'cse', photo: null, at: now - 30 * H, status: 'open', when: 'Yesterday' });
+  // lost & found desk: finders hand items in, the admin publishes them and checks every claim
+  db.lostfound.push({ id: uid('x'), userId: U.irfan.id, kind: 'found', title: 'Blue steel water bottle (Milton)', desc: 'Found in the Library reading hall.', secret: 'Name sticker “KR” under the cap', location: 'library', photo: img('water-bottle')[0], showPhoto: true, at: now - 6 * H, when: 'Today morning', status: 'held', receivedBy: U.admin.id, receivedAt: now - 5.5 * H, publishedAt: now - 5.5 * H,
+    claims: [{ id: uid('lc'), userId: U.kavya.id, proof: 'It is mine — lost it in the Library reading hall this morning. It has a small name sticker with my initials KR on the cap.', at: now - 2 * H, status: 'pending' }] });
+  db.lostfound.push({ id: uid('x'), userId: U.sneha.id, kind: 'found', title: 'ID card holder with lanyard', desc: 'Red lanyard, found on a canteen table.', secret: 'Library card inside; lanyard has a college fest logo', location: 'canteen', photo: img('id-lanyard')[0], showPhoto: false, at: now - 26 * H, when: 'Lunch time', status: 'held', receivedBy: U.admin.id, receivedAt: now - 25 * H, publishedAt: now - 25 * H, claims: [] });
+  db.lostfound.push({ id: uid('x'), userId: U.sneha.id, kind: 'found', title: 'Black umbrella', desc: 'Left at CSE block seminar hall.', secret: 'Wooden handle with a small crack', location: 'cse', photo: null, at: now - 40 * 60000, when: 'Today, after class', status: 'pending', claims: [] });
 
   // notifications
   const n = (u, type, title, body, link, minsAgo, read = false) => db.notifications.push({ id: uid('n'), userId: u.id, type, title, body, link, at: now - minsAgo * 60000, read });
-  n(U.priya, 'offer', 'New offer received', 'Rahul Dev offered ₹250 for “Data Structures textbook + solved notes”.', `#/deal/${rahulDeal.id}`, 25);
+  n(U.priya, 'offer', 'Request for your free item', 'Rahul Dev requested “FREE: Data Structures textbook + solved notes”.', `#/deal/${rahulDeal.id}`, 25);
   n(U.priya, 'deal', 'Deal accepted ✓', 'Meet Kavya at Central Library for the calculator handover.', `#/deal/${d1.id}`, 84, true);
   n(U.kavya, 'track', 'Live update', 'Arjun Kumar: picked up', `#/deal/${d3.id}`, 8);
   n(U.sneha, 'offer', 'New helper offer', '3 helpers offered for “Print & spiral-bind project report”.', `#/task/${T[1].id}`, 60);
   n(U.admin, 'admin', 'New dispute', 'Item not as described — review within 24h', '#/admin/reports', 20 * 60);
+  n(U.admin, 'admin', 'Found item reported', 'Sneha Iyer is handing in “Black umbrella”. Confirm once it reaches the desk.', '#/admin/lostfound', 40);
+  n(U.admin, 'admin', 'New claim on a found item', 'Kavya Ramesh says “Blue steel water bottle (Milton)” is theirs. Check their proof before releasing it.', '#/admin/lostfound', 120);
 
   return db;
 }

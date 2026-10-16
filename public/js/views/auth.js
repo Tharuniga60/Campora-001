@@ -1,5 +1,5 @@
-import { html, raw, $, icon, LOGO, store, api, t, toast, toastErr, avatar, pickImage, locName } from '../core.js';
-import { getLang, setLang } from '../i18n.js';
+import { html, raw, $, icon, LOGO, store, api, demoLogin, t, toast, toastErr, avatar, pickImage, locName } from '../core.js';
+import { getLang, setLang } from '../i18n/index.js';
 
 const HERO = () => {
   const dots = [];
@@ -100,7 +100,7 @@ export async function auth({ root, onDone }) {
     const s = e.target.closest('[data-s]');
     if (s) { state.step = s.dataset.s; state.otpSent = false; render(); return; }
     const demo = e.target.closest('[data-demo]');
-    if (demo) { try { onDone(await api('/auth/demo', { method: 'POST', body: { userId: demo.dataset.demo } })); } catch (err) { toastErr(err); } return; }
+    if (demo) { try { onDone(await demoLogin(demo.dataset.demo)); } catch (err) { toastErr(err); } return; }
     if (e.target.closest('#lang')) { setLang(getLang() === 'ta' ? 'en' : 'ta'); render(); return; }
     if (e.target.closest('#fill')) { [...state.demoOtp].forEach((d, i) => { root.querySelector(`[data-o="${i}"]`).value = d; }); return; }
     if (e.target.closest('#change')) { state.otpSent = false; render(); return; }

@@ -37,6 +37,7 @@ export async function user({ root, params, setTop }) {
   const reviews = () => { const r = u.reviews.filter((x) => rf === 'all' || x.role === rf); return r.length ? r.map((x) => html`<div class="review"><div class="row">${avatar(x.fromUser, 30, { badge: false })}<div class="grow"><b class="small">${x.fromUser?.name}</b> <span class="tiny faint">· ${t(ROLE[x.role]?.[1] || '')} · ${ago(x.at)}</span><div>${stars(x.stars)}</div></div></div>${x.text ? html`<p class="small mt-6">${x.text}</p>` : ''}${x.tags?.length ? html`<div class="row gap-4 wrap mt-6">${x.tags.map((g) => html`<span class="pill">${g}</span>`)}</div>` : ''}</div>`) : html`<p class="muted small mt-10">${t('No reviews in this role yet.')}</p>`; };
   root.innerHTML = html`${hero(u)}
     <div class="btn-row mt-16"><button class="btn" id="msg">${icon('chat')} ${t('Message')}</button><button class="btn ghost" id="block">${u.blockedByMe ? t('Unblock') : t('Block')}</button></div>
+    <button class="btn ghost danger-ghost block mt-10" id="reportVendor">${icon('flag')} ${t('Report vendor')}</button>
     <div class="section"><h3>${t('History by role')}</h3><div class="stat-grid mt-10">${u.history.map((h) => html`<div class="card stat"><b>${ROLE[h.role][0]} ${h.count}</b><span>${t(ROLE[h.role][1])}</span></div>`)}</div></div>
     <div class="section"><h3>${t('Reviews')} <span class="faint">${u.reviews.length}</span></h3>
       <div class="chips mt-10">${[['all', 'All'], ...Object.entries(ROLE).map(([k, v]) => [k, v[1]])].map(([k, l]) => html`<button class="chip ${rf === k ? 'on' : ''}" data-rf="${k}">${t(l)}</button>`)}</div><div id="rv">${reviews()}</div></div>
@@ -53,7 +54,7 @@ export async function user({ root, params, setTop }) {
       }
     } catch (err) { toastErr(err); }
   });
-  $('#report').onclick = () => reportSheet('user', u.id, u.name);
+  $('#report').onclick = $('#reportVendor').onclick = () => reportSheet('user', u.id, u.name);
 }
 
 export async function me({ root, setTop }) {

@@ -1,4 +1,4 @@
-// English source strings double as keys; Tamil lives in ta.js. Unknown keys fall back to English.
+// English source strings double as keys; Tamil lives in ./ta.js. Unknown keys fall back to English.
 import TA from './ta.js';
 
 let lang = localStorage.getItem('cl.lang') || 'en';

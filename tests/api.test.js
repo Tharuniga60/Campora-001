@@ -1,36 +1,18 @@
 // End-to-end API tests: escrow, mutual acceptance, OTP handover, fairness caps, fraud checks, moderation.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
-import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { startServer } from './helpers/server.js';
 
-const DIR = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.resolve(DIR, '..');
-const SERVER_INDEX = path.join(ROOT, 'server', 'index.js');
-
-const PORT = 3900 + Math.floor(Math.random() * 90);
-const BASE = `http://localhost:${PORT}/api`;
-const DB = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'cl-')), 'db.json');
-let srv;
-const call = async (p, { method = 'GET', body, token } = {}) => {
-  const r = await fetch(BASE + p, { method, headers: { 'content-type': 'application/json', ...(token ? { authorization: 'Bearer ' + token } : {}) }, body: body ? JSON.stringify(body) : undefined });
-  const data = await r.json();
-  return { status: r.status, data };
-};
-const ok = async (...a) => { const r = await call(...a); assert.equal(r.status, 200, JSON.stringify(r.data)); return r.data; };
-let cfg, T = {};
+let srv, cfg, call, ok;
+const T = {};
 
 before(async () => {
-  srv = spawn(process.execPath, [SERVER_INDEX, '--reset'], { cwd: ROOT, env: { ...process.env, PORT, DB_FILE: DB }, stdio: 'ignore' });
-  for (let i = 0; i < 50; i++) { try { await fetch(BASE + '/config'); break; } catch { await new Promise((r) => setTimeout(r, 100)); } }
-  cfg = await ok('/config');
-  for (const u of cfg.demoUsers) T[u.persona.split(' ')[0].toLowerCase()] = (await ok('/auth/demo', { method: 'POST', body: { userId: u.id } })).token;
+  srv = await startServer();
+  ({ cfg, call, ok } = srv);
+  Object.assign(T, srv.tokens);
   for (const k of ['buyer', 'new', 'seller']) await ok('/wallet/topup', { method: 'POST', token: T[k], body: { amount: 2000 } });
 });
-after(() => srv.kill());
+after(() => srv.stop());
 
 test('signup requires college email, OTP and consent; one account per phone & ID', async () => {
   const bad = await call('/auth/signup', { method: 'POST', body: { name: 'X Y', email: 'x@gmail.com', collegeId: 'CS24999', dept: 'CSE', phone: '9123456780', consent: { terms: true, privacy: true } } });
@@ -136,7 +118,7 @@ test('task: reward locked at posting, helper cap enforced, OTP pays helper', asy
 });
 
 test('changes after acceptance need re-approval; dispute freezes escrow; admin decides with reason', async () => {
-  const listing = (await ok('/listings?cat=books', { token: T.buyer })).find((l) => !l.mine && l.price > 0 && l.price < 300);
+  const listing = await ok('/listings', { method: 'POST', token: T.seller, body: { title: 'Engineering drawing sheets (A2, 20 pack)', category: 'stationery', condition: 'good', price: 200, photos: ['data:image/png;base64,iVBORw0KGgo='] } });
   const d = await ok(`/listings/${listing.id}/offer`, { method: 'POST', token: T.buyer, body: { amount: listing.price } });
   const sellerTok = await (async () => { for (const k of Object.keys(T)) { const me = await ok('/me', { token: T[k] }); if (me.id === listing.seller.id) return T[k]; } })();
   if (!sellerTok) return;

@@ -110,4 +110,21 @@ export default {
   // side panel
   'Transparency': 'வெளிப்படைத்தன்மை', 'Mutual acceptance': 'பரஸ்பர ஒப்புதல்', 'Anti-fraud': 'மோசடி தடுப்பு', 'Proper profiles': 'முறையான சுயவிவரங்கள்', 'Equal priority': 'சம முன்னுரிமை',
   'Judge mode · switch persona': 'நடுவர் முறை · பாத்திரம் மாற்று',
+  // books are free-only
+  'As per government rules, second-hand books can’t be sold — books & notes can only be given away for free.': 'அரசு விதிகளின்படி பழைய புத்தகங்களை விற்க முடியாது — புத்தகங்கள் & குறிப்புகளை இலவசமாக மட்டுமே வழங்கலாம்.',
+  'Books & notes on CampusLoop are always free — second-hand books can’t be sold as per government rules.': 'CampusLoop-இல் புத்தகங்கள் & குறிப்புகள் எப்போதும் இலவசம் — அரசு விதிகளின்படி பழைய புத்தகங்களை விற்க முடியாது.',
+  'Selling second-hand books or notes (give them away free instead)': 'பழைய புத்தகங்கள் அல்லது குறிப்புகளை விற்பது (அதற்குப் பதிலாக இலவசமாக வழங்குங்கள்)',
+  'Books are free': 'புத்தகங்கள் இலவசம்',
+  // lost & found desk
+  'Hand in a found item': 'கிடைத்த பொருளை ஒப்படை', 'I found something': 'நான் ஒரு பொருளைக் கண்டெடுத்தேன்', 'At the desk': 'மேசையில் உள்ளவை', 'My reports & claims': 'என் புகார்கள் & கோரிக்கைகள்',
+  'Every found item goes through the admin desk': 'கிடைத்த ஒவ்வொரு பொருளும் நிர்வாக மேசை வழியாகவே செல்லும்',
+  'This is mine': 'இது என்னுடையது', 'Claim this item': 'இந்தப் பொருளைக் கோரு', 'Prove it is yours': 'இது உங்களுடையது என நிரூபியுங்கள்', 'Send claim': 'கோரிக்கையை அனுப்பு',
+  'Claim sent — the desk will verify it': 'கோரிக்கை அனுப்பப்பட்டது — மேசை சரிபார்க்கும்', 'Report to admin desk': 'நிர்வாக மேசைக்குத் தெரிவி',
+  'Reported — please hand it in at the admin desk': 'தெரிவிக்கப்பட்டது — தயவுசெய்து நிர்வாக மேசையில் ஒப்படையுங்கள்',
+  'Waiting for the desk': 'மேசைக்காகக் காத்திருக்கிறது', 'At the admin desk': 'நிர்வாக மேசையில்', 'Ready to collect': 'பெற்றுக்கொள்ளத் தயார்', 'Returned to owner': 'உரிமையாளரிடம் ஒப்படைக்கப்பட்டது',
+  'Claim being verified': 'கோரிக்கை சரிபார்க்கப்படுகிறது', 'Claim approved': 'கோரிக்கை ஏற்கப்பட்டது', 'Claim not approved': 'கோரிக்கை ஏற்கப்படவில்லை',
+  'desk with your college ID.': 'மேசையில் உங்கள் கல்லூரி அடையாள அட்டையுடன் பெற்றுக்கொள்ளுங்கள்.', 'Collect it at the': 'பெற்றுக்கொள்ளும் இடம்:',
+  'Nothing at the desk right now': 'இப்போது மேசையில் எதுவும் இல்லை', 'Withdraw': 'திரும்பப் பெறு', 'Found at': 'கண்டெடுத்த இடம்',
+  'Lost & found': 'தொலைந்தவை & கிடைத்தவை',
+  'As per government rules, second-hand books and notes cannot be sold. You can give them away for free — no price, no fees.': 'அரசு விதிகளின்படி பழைய புத்தகங்கள் மற்றும் குறிப்புகளை விற்க முடியாது. அவற்றை இலவசமாக வழங்கலாம் — விலை இல்லை, கட்டணம் இல்லை.',
 };

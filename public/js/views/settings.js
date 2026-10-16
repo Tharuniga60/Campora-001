@@ -1,16 +1,54 @@
-import { html, $, icon, store, api, t, ago, when, until, avatar, empty, sheet, formSheet, confirmSheet, toast, toastErr, refreshMe, applyPrefs, emit } from '../core.js';
-import { setLang } from '../i18n.js';
+import { html, $, icon, store, api, t, ago, when, until, avatar, empty, sheet, formSheet, confirmSheet, toast, toastErr, refreshMe, applyPrefs, emit, pickImage } from '../core.js';
+import { setLang } from '../i18n/index.js';
 
-const REASONS = ['Fake or counterfeit item', 'Prohibited item or task', 'Scam or fraud', 'Asked to pay outside the app', 'Harassment or abuse', 'No-show', 'Wrong category / spam', 'Other'];
+const RSTATUS = { open: ['mari', 'Pending'], under_review: ['indigo', 'Under review'], resolved: ['ok', 'Resolved'], dismissed: ['', 'Dismissed'] };
+const statusPill = (s) => html`<span class="pill ${RSTATUS[s]?.[0] || ''}">${t(RSTATUS[s]?.[1] || s)}</span>`;
 
+// Report a vendor (their profile, listing or task) or other content. Validated here for quick feedback and again on the server.
 export async function reportSheet(targetType, targetId, label = '') {
-  const v = await formSheet({
-    title: t('Report'), intro: `${label ? `“${label}” — ` : ''}${t('An admin reviews every report within')} ${store.config.settings.disputeSlaHours}h. ${t('You will see the decision and its reason.')}`,
-    fields: [{ name: 'reason', label: t('Reason'), type: 'select', options: REASONS.map((r) => ({ value: r, label: t(r) })) }, { name: 'details', label: t('What happened?'), type: 'textarea', placeholder: t('Facts help the admin decide fairly') }, ...(targetType !== 'message' ? [{ name: 'block', label: t('Also block this user'), type: 'check' }] : [{ name: 'block', label: t('Also block the sender'), type: 'check' }])],
-    ok: t('Submit report'), danger: true,
+  const vendor = ['user', 'listing', 'task'].includes(targetType);
+  const cats = store.config.reportCategories || [];
+  const min = vendor ? 10 : 0;
+  let evidence = null;
+  sheet(html`<form id="rf" novalidate><h2>${vendor ? t('Report vendor') : t('Report')}</h2>
+    <p class="muted small mt-6">${label ? `“${label}” — ` : ''}${t('An admin reviews every report within')} ${store.config.settings.disputeSlaHours}h. ${t('You can follow its status in Settings → My reports.')}</p>
+    <label class="f mt-16"><span>${t('Reason')}</span><select class="in" name="category" required><option value="">${t('Choose a reason…')}</option>${cats.map((c) => html`<option value="${c.id}">${t(c.en)}</option>`)}</select></label>
+    <div class="hint" id="cathint" hidden></div>
+    <label class="f"><span>${t('What happened?')}${vendor ? '' : ` (${t('optional')})`}</span><textarea class="in" name="details" maxlength="1000" placeholder="${t('Facts help the admin decide fairly — what was agreed, what happened, when.')}"></textarea><div class="hint"><span id="cnt">0</span>/1000${min ? ` · ${t('at least')} ${min} ${t('characters')}` : ''}</div></label>
+    <div class="f"><span class="small muted" style="font-weight:700">${t('Evidence (optional)')}</span>
+      <div class="row gap-6 mt-6"><button type="button" class="btn sm ghost" id="ev">${icon('camera')} ${t('Add photo or screenshot')}</button><img id="evp" alt="${t('Evidence preview')}" hidden style="width:52px;height:52px;border-radius:10px;object-fit:cover"><button type="button" class="btn xs ghost" id="evx" hidden>${t('Remove')}</button></div>
+      <div class="hint">${t('A chat screenshot or photo of the item. Do not include anyone’s phone number or room.')}</div></div>
+    <label class="check"><input type="checkbox" name="block"><span>${targetType === 'message' ? t('Also block the sender') : t('Also block this user')}</span></label>
+    <div class="banner info mt-10">${icon('info')}<div><p class="small">${t('A report starts an investigation — nobody is penalised just for being reported. Knowingly false reports can lead to action against the reporter.')}</p></div></div>
+    <p class="small err mt-10" id="rerr" role="alert" hidden></p>
+    <div class="btn-row mt-16"><button type="button" class="btn ghost" data-close>${t('Cancel')}</button><button class="btn danger" id="rsub">${t('Submit report')}</button></div></form>`.s, {
+    onMount(el, close) {
+      const f = el.querySelector('#rf'), err = el.querySelector('#rerr'), sub = el.querySelector('#rsub');
+      const showErr = (m) => { err.textContent = m; err.hidden = !m; };
+      f.details.addEventListener('input', () => { el.querySelector('#cnt').textContent = f.details.value.length; showErr(''); });
+      f.category.addEventListener('change', () => { showErr(''); const c = cats.find((x) => x.id === f.category.value), h = el.querySelector('#cathint'); h.textContent = c?.hint ? t(c.hint) : ''; h.hidden = !c?.hint; });
+      el.querySelector('#ev').onclick = async () => {
+        const img = await pickImage({ max: 1000 }); if (!img) return;
+        evidence = img; const p = el.querySelector('#evp'); p.src = img; p.hidden = false; el.querySelector('#evx').hidden = false;
+      };
+      el.querySelector('#evx').onclick = () => { evidence = null; el.querySelector('#evp').hidden = true; el.querySelector('#evx').hidden = true; };
+      f.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const details = f.details.value.trim();
+        if (!f.category.value) return showErr(t('Choose a reason.'));
+        if (details.length < min) return showErr(`${t('Please describe what happened (at least')} ${min} ${t('characters).')}`);
+        showErr('');
+        sub.disabled = true; sub.textContent = t('Submitting…');
+        try {
+          const r = await api('/reports', { method: 'POST', body: { targetType, targetId, category: f.category.value, details, evidence, block: f.block.checked } });
+          close();
+          if (f.block.checked) refreshMe();
+          sheet(html`<div class="center"><div style="font-size:2.4rem">🛡️</div><h2>${t('Report submitted')}</h2><p class="muted mt-6">${t('Status')}: ${statusPill(r.status)}</p><p class="small muted mt-6">${t('An admin will look at the evidence. You will be notified of the outcome and its reason.')}</p>
+            <a class="btn block mt-16" href="#/settings/reports" data-close>${t('View my reports')}</a><button class="btn ghost block mt-10" data-close>${t('Done')}</button></div>`.s);
+        } catch (ex) { showErr(ex.message); sub.disabled = false; sub.textContent = t('Submit report'); }
+      });
+    },
   });
-  if (!v) return;
-  try { await api('/reports', { method: 'POST', body: { targetType, targetId, ...v } }); toast(t('Report submitted'), 'ok', t('Track it in Settings → My reports')); } catch (e) { toastErr(e); }
 }
 
 export function rulesSheet() {
@@ -49,6 +87,7 @@ export async function main({ root, setTop }) {
     <div class="card list mt-10">
       <a class="li" href="#/settings/rules"><span class="ic-box">${icon('doc')}</span><span class="grow">${t('Rules, fees & limits')}</span>${icon('chev', 'chev')}</a>
       <a class="li" href="#/settings/reports"><span class="ic-box">${icon('flag')}</span><span class="grow">${t('My reports & disputes')}</span>${icon('chev', 'chev')}</a>
+      <a class="li" href="#/settings/moderation"><span class="ic-box">${icon('shield')}</span><span class="grow">${t('Account status & appeals')}</span>${m.status !== 'active' || m.restrictions?.listings ? html`<span class="pill kum">${t('Action needed')}</span>` : ''}${icon('chev', 'chev')}</a>
       <a class="li" href="#/settings/blocked"><span class="ic-box">${icon('ban')}</span><span class="grow">${t('Blocked users')}</span><span class="tiny faint">${m.blocked.length}</span>${icon('chev', 'chev')}</a>
       <a class="li" href="#/settings/support"><span class="ic-box">${icon('info')}</span><span class="grow">${t('Help & support')}</span>${icon('chev', 'chev')}</a>
       <a class="li" href="#/map"><span class="ic-box">${icon('map')}</span><span class="grow">${t('Safe meeting points')}</span>${icon('chev', 'chev')}</a></div>
@@ -90,11 +129,51 @@ export async function section({ root, params, setTop }) {
     setTop({ back: true, title: t('My reports & disputes') });
     const rs = await api('/reports/mine');
     root.innerHTML = rs.length ? html`<div class="col mt-6">${rs.map((r) => html`<div class="card pad">
-      <div class="row between"><span class="pill ${r.kind === 'dispute' ? 'kum' : 'indigo'}">${r.kind === 'dispute' ? t('Dispute') : t('Report')}</span>${r.status === 'open' ? html`<span class="sla ${r.overdue ? 'late' : ''} small">${r.overdue ? t('Overdue') : until(r.dueAt)}</span>` : html`<span class="pill ok">${t('Resolved')}</span>`}</div>
-      <h4 class="mt-10">${t(r.reason)}</h4>${r.details ? html`<p class="small muted mt-6">${r.details}</p>` : ''}
+      <div class="row between"><span class="row gap-4"><span class="pill ${r.kind === 'dispute' ? 'kum' : 'indigo'}">${r.kind === 'dispute' ? t('Dispute') : t('Report')}</span>${statusPill(r.status)}</span>${['open', 'under_review'].includes(r.status) ? html`<span class="sla ${r.overdue ? 'late' : ''} small">${r.overdue ? t('Overdue') : until(r.dueAt)}</span>` : ''}</div>
+      <h4 class="mt-10">${t(r.kind === 'report' ? r.categoryLabel : r.reason)}</h4>${r.details ? html`<p class="small muted mt-6">${r.details}</p>` : ''}${r.evidence ? html`<img src="${r.evidence}" alt="${t('Evidence')}" class="mt-10" style="border-radius:12px;max-height:120px">` : ''}
       <p class="tiny faint mt-6">${t('Filed')} ${when(r.createdAt)}${r.dealId ? html` · <a class="link" href="#/deal/${r.dealId}">${t('View deal')}</a>` : ''}</p>
-      ${r.decision ? html`<div class="banner info mt-10">${icon('shield')}<div><b>${t('Decision')}: ${r.decision.action}</b><p class="small">${r.decision.reason}</p><p class="tiny">${when(r.decision.at)}</p></div></div>` : ''}</div>`)}</div>`
+      ${r.decision ? html`<div class="banner info mt-10">${icon('shield')}<div><b>${r.status === 'dismissed' ? t('No violation confirmed') : `${t('Decision')}: ${r.decision.action}`}</b><p class="small">${r.decision.reason}</p><p class="tiny">${when(r.decision.at)}</p></div></div>` : ''}</div>`)}</div>`
       : empty('🛡️', t('No reports yet'), t('Reports and disputes you raise — and their outcomes — appear here.'));
+    return;
+  }
+  if (sec === 'moderation') {
+    setTop({ back: true, title: t('Account status & appeals') });
+    const render = async () => {
+      let m;
+      try { m = await api('/moderation/mine'); } catch (e) { root.innerHTML = html`<div class="banner bad mt-6">${icon('alert')}<div><b>${t('Could not load your account status')}</b><p class="small">${e.message}</p></div></div>`.s; return; }
+      const lr = m.restrictions.listings;
+      const statusCard = m.status === 'active' && !lr
+        ? html`<div class="banner info mt-6">${icon('shieldok')}<div><b>${t('Your account is in good standing')}</b><p class="small">${m.strikes}/3 ${t('strikes')}. ${t('You can buy, sell and post tasks normally.')}</p></div></div>`
+        : html`<div class="banner bad mt-6">${icon('ban')}<div><b>${m.status === 'banned' ? t('Account banned') : m.status === 'suspended' ? `${t('Account suspended')}${m.suspendedUntil ? ` · ${t('until')} ${when(m.suspendedUntil)}` : ''}` : `${t('Listings restricted')}${lr?.until ? ` · ${t('until')} ${when(lr.until)}` : ''}`}</b>
+            <p class="small">${t('Reason')}: ${m.status !== 'active' ? m.statusReason : lr.reason}</p><p class="small">${t('Your records and transaction history are kept. You can still finish active deals. If you think this is wrong, appeal below.')}</p></div></div>`;
+      root.innerHTML = html`${statusCard}
+        <p class="tiny faint mt-10">${t('Every action on your account is listed with its reason. You can appeal within')} ${m.appealWindowDays} ${t('days; a moderator reviews it and replies with a reason.')}</p>
+        <div class="col mt-10">${m.actions.length ? m.actions.map((a) => html`<div class="card pad">
+          <div class="row between"><b>${t(a.title)}</b><span class="tiny faint">${when(a.at)}</span></div>
+          <p class="small muted mt-6">${a.reason}</p>
+          ${a.correction ? html`<div class="card pad-sm mt-10"><div class="tiny faint">${t('Correction requested')} · ${t('due')} ${when(a.correction.dueAt)}</div><p class="small mt-6">${a.correction.text}</p>
+            ${a.correction.doneAt ? html`<span class="pill ok mt-6">✓ ${t('Marked as corrected')} ${when(a.correction.doneAt)}</span>` : html`<button class="btn sm mt-10" data-fix="${a.id}">${icon('check')} ${t('I have corrected this')}</button>`}</div>` : ''}
+          ${a.rescinded ? html`<div class="banner info mt-10">${icon('check')}<div><b>${t('Reversed')}</b><p class="small">${a.rescinded.reason}</p></div></div>` : ''}
+          ${a.appeal ? html`<div class="mt-10"><span class="pill ${a.appeal.status === 'pending' ? 'mari' : a.appeal.status === 'overturned' ? 'ok' : 'kum'}">${t('Appeal')}: ${t({ pending: 'Pending review', overturned: 'Accepted', upheld: 'Not accepted' }[a.appeal.status])}</span>${a.appeal.decision ? html`<p class="small muted mt-6">${a.appeal.decision.reason}</p>` : ''}</div>` : ''}
+          ${a.canAppeal ? html`<button class="btn sm ghost mt-10" data-appeal="${a.id}">${t('Appeal this decision')}</button>` : ''}</div>`) : empty('🌿', t('No actions on your account'), t('Warnings, restrictions and their reasons would appear here.'))}</div>`;
+    };
+    await render();
+    root.onclick = async (e) => {
+      const ap = e.target.closest('[data-appeal]'), fx = e.target.closest('[data-fix]');
+      try {
+        if (ap) {
+          const v = await formSheet({ title: t('Appeal this decision'), intro: t('Explain clearly why the decision should change. Mention any chat, deal or photo that supports you. One appeal per decision.'), fields: [{ name: 'text', label: t('Your appeal (at least 20 characters)'), type: 'textarea', required: true }], ok: t('Submit appeal') });
+          if (!v) return;
+          if (v.text.trim().length < 20) return toast(t('Please write at least 20 characters.'), 'err');
+          await api('/appeals', { method: 'POST', body: { actionId: ap.dataset.appeal, text: v.text } }); toast(t('Appeal submitted — a moderator will review it'), 'ok'); render();
+        }
+        if (fx) {
+          const v = await formSheet({ title: t('Mark as corrected'), fields: [{ name: 'note', label: t('What did you change? (optional)'), type: 'textarea' }], ok: t('Confirm') });
+          if (!v) return;
+          await api(`/moderation/${fx.dataset.fix}/corrected`, { method: 'POST', body: v }); toast(t('Thanks — a moderator will verify it'), 'ok'); render();
+        }
+      } catch (err) { toastErr(err); }
+    };
     return;
   }
   if (sec === 'blocked') {
