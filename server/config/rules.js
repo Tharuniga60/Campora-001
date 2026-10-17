@@ -7,11 +7,11 @@ export const DEPARTMENTS = ['CSE', 'IT', 'AI & DS', 'ECE', 'EEE', 'MECH', 'CIVIL
 
 export const CAMPUS = {
   name: process.env.CAMPUS_NAME || 'Demo Engineering College',
-  short: 'DEC',
-  emailDomains: (process.env.CAMPUS_DOMAINS || 'dec.edu.in,staff.dec.edu.in').split(','),
-  collegeIdPattern: '^[A-Za-z]{2,4}[0-9]{4,8}$',
+  short: process.env.CAMPUS_SHORT || 'DEC',
+  emailDomains: (process.env.CAMPUS_DOMAINS || 'dec.edu.in,staff.dec.edu.in').split(',').map((d) => d.trim().toLowerCase()).filter(Boolean),
+  collegeIdPattern: process.env.COLLEGE_ID_PATTERN || '^[A-Za-z]{2,4}[0-9]{4,8}$',
   securityPhone: process.env.SECURITY_PHONE || '+91 94430 00100',
-  securityName: 'Campus Security Control Room',
+  securityName: process.env.SECURITY_NAME || 'Campus Security Control Room',
 };
 
 export const DEFAULT_SETTINGS = {

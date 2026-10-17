@@ -3,6 +3,7 @@ import { db, find, uid } from '../core/db.js';
 import { fail, now } from '../core/util.js';
 import { afterPaid, step } from './deals.js';
 
+export const payoutView = (p) => ({ id: p.id, amount: p.amount, upi: p.upiMasked, status: p.status, createdAt: p.createdAt, paidAt: p.paidAt || null, ref: p.ref || null, reason: p.reason || null });
 export function ledger(userId, type, amount, note, dealId = null) {
   db.ledger.push({ id: uid('l'), userId, type, amount, note, dealId, at: now() });
 }

@@ -11,7 +11,7 @@ export const DB_FILE = process.env.DB_FILE || path.join(ROOT, 'data', 'db.json')
 export const COLLECTIONS = [
   'users', 'sessions', 'otps', 'listings', 'tasks', 'deals', 'threads', 'messages',
   'notifications', 'reports', 'reviews', 'lostfound', 'announcements', 'ledger',
-  'audit', 'sos', 'flags', 'modlog', 'appeals',
+  'audit', 'sos', 'flags', 'modlog', 'appeals', 'payments', 'payouts',
 ];
 
 export function emptyDb() {

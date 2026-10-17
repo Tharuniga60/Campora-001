@@ -53,14 +53,51 @@ When running in demo mode, you can log in with one click as any of the sample ca
 
 ---
 
+## 🏫 Real Deployment (your campus, real users)
+
+Demo mode is the default so anyone can try the app in 30 seconds. For real students and staff, switch to a real deployment: no sample data, OTPs sent by SMS, real payments through Razorpay, and admins you choose.
+
+1. **Create your settings file**
+   ```bash
+   cp .env.example .env
+   ```
+   Fill in `.env`:
+   - `DATA_KEY`: a random secret (the command to generate one is in the file). **Back it up**: it encrypts phone numbers and emails.
+   - `CAMPUS_NAME`, `CAMPUS_DOMAINS`: only emails on these domains can sign up.
+   - `ADMIN_PHONES`: mobile numbers that get the admin panel when they sign up.
+   - **SMS for OTPs**: `SMS_PROVIDER=msg91` with `MSG91_AUTH_KEY` + `MSG91_TEMPLATE_ID` (DLT-approved OTP template containing `##OTP##`), or `SMS_PROVIDER=twilio` with your Twilio SID, token and sender.
+   - **Payments (optional)**: `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` (start with `rzp_test_` keys), and a webhook `https://YOUR-DOMAIN/api/payments/razorpay/webhook` (events `payment.captured`, `order.paid`) with its secret in `RAZORPAY_WEBHOOK_SECRET`. Keep **auto-capture** on in Razorpay.
+
+2. **Start**
+   ```bash
+   npm start
+   ```
+   The server checks the configuration first and lists anything that is missing. It starts with an empty campus database (`DB_FILE`). It never seeds demo data, and `npm run reset` is refused.
+
+3. **First admin**: sign up in the app with one of the `ADMIN_PHONES` numbers. **Profile → Admin panel** then appears.
+
+**How money works in a real deployment**
+| | |
+|---|---|
+| Add money | Razorpay Checkout (UPI, cards, netbanking). The server verifies Razorpay's signature before crediting, and credits each payment exactly once, from checkout or the webhook. |
+| Withdraw | The member requests a payout to their UPI ID. An admin sends it from the campus UPI account and records the UTR in **Admin panel → Payouts**. Rejected requests go back to the wallet. |
+
+**Hosting checklist**
+- Serve over **HTTPS** (Render, Railway, a VPS with Nginx/Caddy). Set `TRUST_PROXY=1` behind a proxy.
+- Run a **single instance** with a persistent disk for `data/`. Back up `DB_FILE` and keep `DATA_KEY` with the backup.
+- Docker: `docker build -t campora . && docker run --env-file .env -p 3000:3000 -v campora-data:/app/data campora`
+- The campus map and meeting points in `server/config/rules.js` (`LOCATIONS`) are a sample layout. Edit them to match your campus.
+
+---
+
 ## 🧪 Available Scripts
 
 | Command | Action |
 |---|---|
 | `npm start` | Launches the server (auto-seeds demo campus data on initial run) |
 | `npm run dev` | Runs the server in watch mode with automatic restart on file changes |
-| `npm test` | Runs the end-to-end API, per-section and moderation test suites (48 tests) |
-| `npm run reset` | Resets and re-seeds the sample campus database |
+| `npm test` | Runs the end-to-end API, per-section, moderation and production-mode test suites |
+| `npm run reset` | Resets and re-seeds the sample campus database (demo mode only) |
 
 ---
 

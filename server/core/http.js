@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import zlib from 'node:zlib';
+import { paymentsEnabled } from '../config/env.js';
 import { sha } from './db.js';
 import { HttpError, fail, now } from './util.js';
 
@@ -47,16 +48,23 @@ export function serveStatic(req, res, urlPath) {
   if (entry.gz && /\bbr\b/.test(req.headers['accept-encoding'] || '')) { headers['content-encoding'] = 'br'; headers.vary = 'accept-encoding'; res.writeHead(200, headers).end(entry.gz); return; }
   res.writeHead(200, headers).end(entry.buf);
 }
+// Razorpay Checkout needs its script and payment frame; nothing else is loaded from outside the app.
+const RZP = paymentsEnabled();
 export const SEC_HEADERS = {
   'x-content-type-options': 'nosniff', 'referrer-policy': 'same-origin', 'x-frame-options': 'DENY',
-  'permissions-policy': 'geolocation=(self), camera=(self), microphone=()',
-  'content-security-policy': "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; font-src 'self'; frame-ancestors 'none'",
+  'permissions-policy': 'geolocation=(self), camera=(self), microphone=(), payment=(self "https://api.razorpay.com")',
+  'content-security-policy': `default-src 'self'; img-src 'self' data: blob:${RZP ? ' https://*.razorpay.com' : ''}; style-src 'self' 'unsafe-inline'; script-src 'self'${RZP ? ' https://checkout.razorpay.com' : ''}; connect-src 'self'${RZP ? ' https://*.razorpay.com' : ''}; frame-src ${RZP ? 'https://api.razorpay.com https://checkout.razorpay.com' : "'none'"}; font-src 'self'; frame-ancestors 'none'`,
+  ...(process.env.NODE_ENV === 'production' && process.env.DEMO === '0' ? { 'strict-transport-security': 'max-age=31536000; includeSubDomains' } : {}),
 };
 export function readBody(req) {
   return new Promise((resolve, reject) => {
     let size = 0; const chunks = [];
     req.on('data', (c) => { size += c.length; if (size > 4_000_000) { reject(new HttpError(413, 'Request too large.')); req.destroy(); } else chunks.push(c); });
-    req.on('end', () => { if (!chunks.length) return resolve({}); try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8'))); } catch { reject(new HttpError(400, 'Invalid JSON')); } });
+    req.on('end', () => {
+      if (!chunks.length) return resolve({});
+      req.rawBody = Buffer.concat(chunks); // kept for signature checks (payment webhooks)
+      try { resolve(JSON.parse(req.rawBody.toString('utf8'))); } catch { reject(new HttpError(400, 'Invalid JSON')); }
+    });
     req.on('error', reject);
   });
 }

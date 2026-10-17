@@ -1,6 +1,6 @@
 import { html, $, icon, store, api, t, ago, when, until, avatar, who, empty, skeleton, formSheet, confirmSheet, toast, toastErr, statusPill, locName, on, breakdownBox } from '../core.js';
 
-const TABS = [['overview', 'Overview'], ['reports', 'Complaints'], ['vendors', 'Reported vendors'], ['appeals', 'Appeals'], ['lostfound', 'Lost & found'], ['flags', 'Auto-flags'], ['users', 'Users'], ['sos', 'SOS'], ['settings', 'Rules & limits'], ['announce', 'Announce'], ['audit', 'Audit log']];
+const TABS = [['overview', 'Overview'], ['reports', 'Complaints'], ['vendors', 'Reported vendors'], ['appeals', 'Appeals'], ['lostfound', 'Lost & found'], ['payouts', 'Payouts'], ['flags', 'Auto-flags'], ['users', 'Users'], ['sos', 'SOS'], ['settings', 'Rules & limits'], ['announce', 'Announce'], ['audit', 'Audit log']];
 const FLAG = { offplatform: ['💸', 'Off-platform payment'], cancellations: ['↩️', 'Repeated cancellations'], price: ['📈', 'Price manipulation'], duplicate: ['🪞', 'Duplicate listing'], prohibited: ['🚫', 'Prohibited attempt'], otp: ['🔢', 'OTP guessing'], reports_threshold: ['📣', 'Report threshold reached'], report_abuse: ['🎭', 'Unreliable reporting'] };
 
 export async function main({ root, params, query, setTop }) {
@@ -9,7 +9,7 @@ export async function main({ root, params, query, setTop }) {
   setTop({ back: true, title: t('Admin panel') });
   root.innerHTML = html`<div class="tabs">${TABS.map(([k, l]) => html`<button class="${k === tab ? 'on' : ''}" data-go="#/admin/${k}">${t(l)}</button>`)}</div><div id="body">${skeleton(4)}</div>`;
   const body = $('#body', root);
-  const R = { overview, reports, vendors, appeals, lostfound: lostfoundDesk, flags, users, sos, settings, announce, audit }[tab];
+  const R = { overview, reports, vendors, appeals, lostfound: lostfoundDesk, payouts, flags, users, sos, settings, announce, audit }[tab];
   if (!R) { location.hash = '#/admin'; return; }
   await R(body, query);
   const off = on('admin', () => tab !== 'settings' && R(body));
@@ -24,7 +24,7 @@ async function overview(body) {
   const catMax = Math.max(1, ...o.cats.map((c) => c.n));
   const K = (v, l, hi) => html`<div class="card stat ${hi ? 'hi' : ''}"><b class="num">${v}</b><span>${l}</span></div>`;
   body.innerHTML = html`
-    ${k.openReports || k.openSos || k.openAppeals || k.lostFoundPending ? html`<div class="banner bad">${icon('alert')}<div><b>${k.openReports} ${t('open complaints')} · ${k.vendorsFlagged} ${t('vendors to review')} · ${k.openAppeals} ${t('appeals')} · ${k.openFlags} ${t('auto-flags')} · ${k.openSos} SOS</b><p class="small"><a class="link" href="#/admin/reports">${t('Complaints queue')} →</a> · <a class="link" href="#/admin/vendors">${t('Vendors')} →</a>${k.openAppeals ? html` · <a class="link" href="#/admin/appeals">${t('Appeals')} →</a>` : ''}${k.lostFoundPending ? html` · <a class="link" href="#/admin/lostfound">📦 ${k.lostFoundPending} ${t('lost & found to handle')} →</a>` : ''}</p></div></div>` : ''}
+    ${k.openReports || k.openSos || k.openAppeals || k.lostFoundPending || k.payoutsPending ? html`<div class="banner bad">${icon('alert')}<div><b>${k.openReports} ${t('open complaints')} · ${k.vendorsFlagged} ${t('vendors to review')} · ${k.openAppeals} ${t('appeals')} · ${k.openFlags} ${t('auto-flags')} · ${k.openSos} SOS</b><p class="small"><a class="link" href="#/admin/reports">${t('Complaints queue')} →</a> · <a class="link" href="#/admin/vendors">${t('Vendors')} →</a>${k.openAppeals ? html` · <a class="link" href="#/admin/appeals">${t('Appeals')} →</a>` : ''}${k.payoutsPending ? html` · <a class="link" href="#/admin/payouts">💸 ${k.payoutsPending} ${t('withdrawals to pay')} →</a>` : ''}${k.lostFoundPending ? html` · <a class="link" href="#/admin/lostfound">📦 ${k.lostFoundPending} ${t('lost & found to handle')} →</a>` : ''}</p></div></div>` : ''}
     <h4 class="mt-16">${t('Success metrics')}</h4><p class="tiny faint">${t('As defined in the problem statement’s expected outcome')}</p>
     <div class="stat-grid mt-10">
       ${K(k.completed, t('Completed deals'), true)}${K(k.repeatUsers + '%', t('Repeat usage (2+ deals)'))}
@@ -250,6 +250,30 @@ async function lostfoundDesk(body) {
     if (dn) { const v = await formSheet({ title: t('Reject claim'), fields: [{ name: 'reason', label: t('Reason (shown to the claimant)'), type: 'textarea', required: true, placeholder: t('e.g. Description does not match the item') }], ok: t('Reject'), danger: true }); if (v) act(`/admin/lostfound/${dn.dataset.lfdeny}/claims/${dn.dataset.cid}`, { decision: 'reject', ...v }, t('Claim rejected')); return; }
     const rt = e.target.closest('[data-lfreturned]');
     if (rt && await confirmSheet({ title: t('Owner collected the item?'), body: t('Confirm you checked their college ID at the desk.'), ok: t('Mark collected') })) act(`/admin/lostfound/${rt.dataset.lfreturned}/returned`, {}, t('Returned — finder thanked'));
+  };
+}
+
+// ---------- payouts: members' withdrawal requests, paid manually by UPI and recorded with the bank reference
+async function payouts(body) {
+  const st = body._po ||= { status: 'requested' };
+  const list = await api('/admin/payouts?status=' + st.status);
+  const P = { requested: ['mari', 'To pay'], paid: ['ok', 'Paid'], rejected: ['', 'Returned'] };
+  body.innerHTML = html`<div class="chips">${[['requested', 'To pay'], ['paid', 'Paid'], ['rejected', 'Returned'], ['all', 'All']].map(([k, l]) => html`<button class="chip ${st.status === k ? 'on' : ''}" data-pos="${k}">${t(l)}</button>`)}</div>
+    <p class="tiny faint mt-10">${t('Send each amount from the campus UPI account to the member’s UPI ID, then record the UTR / transaction reference here. The member is notified.')}</p>
+    <div class="card list mt-10">${list.length ? list.map((p) => html`<div class="li" style="align-items:flex-start">${avatar(p.user, 36)}<div class="grow" style="min-width:0">
+      <div class="row between wrap gap-6"><b class="small">${p.user?.name} <span class="tiny faint">${p.collegeId || ''}</span></b><span class="pill ${P[p.status][0]}">${t(P[p.status][1])}</span></div>
+      <div class="mt-6"><b class="num">₹${p.amount}</b> → <code>${p.upiFull}</code></div>
+      <div class="tiny faint mt-6">${t('Requested')} ${when(p.createdAt)}${p.ref ? ` · UTR ${p.ref}` : ''}${p.reason ? ` · ${p.reason}` : ''}</div>
+      ${p.status === 'requested' ? html`<div class="row gap-6 mt-10"><button class="btn sm" data-popaid="${p.id}">✅ ${t('Paid — record UTR')}</button><button class="btn sm ghost" data-poreject="${p.id}">${t('Return to wallet')}</button></div>` : ''}</div></div>`) : html`<div class="pad">${empty('💸', t('Nothing here'), t('No withdrawals in this view.'))}</div>`}</div>`;
+  body.onclick = async (e) => {
+    const s = e.target.closest('[data-pos]'); if (s) { st.status = s.dataset.pos; return payouts(body); }
+    const pd = e.target.closest('[data-popaid]'), rj = e.target.closest('[data-poreject]');
+    if (!pd && !rj) return;
+    const v = pd
+      ? await formSheet({ title: t('Record payment'), fields: [{ name: 'ref', label: t('UPI transaction reference (UTR)'), required: true, placeholder: 'e.g. 412345678901' }], ok: t('Mark paid') })
+      : await formSheet({ title: t('Return to wallet'), fields: [{ name: 'reason', label: t('Reason (shown to the member)'), type: 'textarea', required: true, placeholder: t('e.g. UPI ID is invalid — please request again') }], ok: t('Return money'), danger: true });
+    if (!v) return;
+    try { await api('/admin/payouts/' + (pd || rj).dataset[pd ? 'popaid' : 'poreject'], { method: 'POST', body: { action: pd ? 'paid' : 'reject', ...v } }); toast(pd ? t('Marked paid — member notified') : t('Money returned to wallet'), 'ok'); payouts(body); } catch (err) { toastErr(err); }
   };
 }
 

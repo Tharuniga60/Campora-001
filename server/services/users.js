@@ -127,7 +127,8 @@ export function checkOtp(phone, code) {
   const o = db.otps.find((x) => x.phoneHash === hmac(phone) && x.exp > now());
   if (!o) fail(400, 'OTP expired. Please request a new one.');
   if (++o.tries > 5) fail(429, 'Too many wrong attempts. Request a new OTP.');
-  if (o.codeHash !== sha(String(code).trim() + phone)) fail(400, 'Incorrect OTP.');
+  const given = Buffer.from(sha(String(code).trim() + phone), 'hex');
+  if (!crypto.timingSafeEqual(given, Buffer.from(o.codeHash, 'hex'))) fail(400, 'Incorrect OTP.');
   db.otps = db.otps.filter((x) => x !== o);
 }
 export function newSession(u) {

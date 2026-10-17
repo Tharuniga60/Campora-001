@@ -1,6 +1,7 @@
 // CampusLoop API server — zero dependencies (Node 18+).
 // Wires the feature routers in routes/ into one HTTP server that also serves the PWA from public/.
 import http from 'node:http';
+import { TRUST_PROXY } from './config/env.js';
 import { save } from './core/db.js';
 import { SEC_HEADERS, readBody, routes, serveStatic } from './core/http.js';
 import { streams } from './core/realtime.js';
@@ -22,6 +23,9 @@ import './routes/community.js';
 import './routes/admin.js';
 import './routes/admin-moderation.js';
 
+// behind a reverse proxy (Render, Railway, Nginx…) every request comes from the proxy — use the forwarded client address
+const clientIp = (req) => (TRUST_PROXY && String(req.headers['x-forwarded-for'] || '').split(',')[0].trim()) || req.socket.remoteAddress;
+
 async function handleApi(req, res, url) {
   const send = (status, data) => { res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...SEC_HEADERS }); res.end(JSON.stringify(data)); };
   try {
@@ -41,7 +45,7 @@ async function handleApi(req, res, url) {
     if (!r) return send(404, { error: 'Not found' });
     const m = url.pathname.match(r.re);
     const params = Object.fromEntries(r.keys.map((k, i) => [k, decodeURIComponent(m[i + 1])]));
-    const ctx = { req, res, params, query: Object.fromEntries(url.searchParams), token, ip: req.socket.remoteAddress, body: ['POST', 'PATCH', 'PUT', 'DELETE'].includes(req.method) ? await readBody(req) : {} };
+    const ctx = { req, res, params, query: Object.fromEntries(url.searchParams), token, ip: clientIp(req), body: ['POST', 'PATCH', 'PUT', 'DELETE'].includes(req.method) ? await readBody(req) : {} };
     if (r.opts.auth !== false) {
       ctx.user = authUser(token);
       if (!ctx.user) return send(401, { error: 'Please log in again.' });

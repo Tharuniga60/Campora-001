@@ -10,13 +10,18 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 export const PNG = 'data:image/png;base64,iVBORw0KGgo=';
 
-export async function startServer() {
+// Never read the developer's .env (real SMS / payment keys) — each test server gets an explicit environment.
+export const TEST_ENV = { ENV_FILE: path.join(ROOT, 'tests', '.no-env'), DEMO: '1', SMS_PROVIDER: 'console', RAZORPAY_KEY_ID: '', RAZORPAY_KEY_SECRET: '', RAZORPAY_WEBHOOK_SECRET: '', ADMIN_PHONES: '', TRUST_PROXY: '' };
+
+export async function startServer({ demo = true, env = {} } = {}) {
   const db = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'cl-')), 'db.json');
-  const proc = spawn(process.execPath, [path.join(ROOT, 'server', 'index.js'), '--reset'], { cwd: ROOT, env: { ...process.env, PORT: '0', DB_FILE: db }, stdio: ['ignore', 'pipe', 'inherit'] });
+  const proc = spawn(process.execPath, [path.join(ROOT, 'server', 'index.js'), ...(demo ? ['--reset'] : [])], { cwd: ROOT, env: { ...process.env, ...TEST_ENV, PORT: '0', DB_FILE: db, ...env }, stdio: ['ignore', 'pipe', 'pipe'] });
+  let errOut = '';
+  proc.stderr.on('data', (c) => { errOut += c; process.stderr.write(c); });
   const port = await new Promise((resolve, reject) => {
     let out = '';
     proc.stdout.on('data', (c) => { out += c; const m = out.match(/Local:\s+http:\/\/localhost:(\d+)/); if (m) resolve(+m[1]); });
-    proc.on('exit', (code) => reject(new Error(`server exited (${code}) before listening:\n${out}`)));
+    proc.on('exit', (code) => reject(new Error(`server exited (${code}) before listening:\n${out}${errOut}`)));
   });
   proc.stdout.resume();
   const base = `http://localhost:${port}/api`;
@@ -30,7 +35,7 @@ export async function startServer() {
 
   const cfg = await ok('/config');
   const tokens = {};
-  for (const u of cfg.demoUsers) tokens[u.persona.split(' ')[0].toLowerCase()] = (await post('/auth/demo', null, { userId: u.id })).token;
+  if (demo) for (const u of cfg.demoUsers) tokens[u.persona.split(' ')[0].toLowerCase()] = (await post('/auth/demo', null, { userId: u.id })).token;
 
   return { base, cfg, tokens, call, ok, post, me: (token) => ok('/me', { token }), stop: () => proc.kill() };
 }

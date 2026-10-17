@@ -1,11 +1,13 @@
 // API routes — Public config, phone OTP, sign-up, login and demo personas.
 import crypto from 'node:crypto';
+import { ADMIN_PHONES, RAZORPAY, paymentsEnabled } from '../config/env.js';
 import { CAMPUS, CATEGORIES, CONDITIONS, DEMO, DEPARTMENTS, LOCATIONS, PROHIBITED_SUMMARY, REPORT_CATEGORIES, RULES_TEXT, locById } from '../config/rules.js';
 import { db, hmac, sha } from '../core/db.js';
 import { GET, POST, rateLimit } from '../core/http.js';
 import { S, clampStr, fail, int, now } from '../core/util.js';
 import { audit, notify } from '../services/notifications.js';
 import { checkOtp, makeUser, newSession, normPhone } from '../services/users.js';
+import { sendOtpSms } from '../services/sms.js';
 import { ledger } from '../services/wallet.js';
 
 GET('/api/config', () => ({
@@ -13,10 +15,11 @@ GET('/api/config', () => ({
   categories: CATEGORIES, conditions: CONDITIONS, locations: LOCATIONS, departments: DEPARTMENTS,
   settings: S(), prohibited: PROHIBITED_SUMMARY, rules: RULES_TEXT, demo: DEMO, reportCategories: REPORT_CATEGORIES,
   supportUserId: db.users.find((u) => u.isAdmin && !u.deleted)?.id || null,
+  payments: paymentsEnabled() ? { provider: 'razorpay', keyId: RAZORPAY.keyId } : null, topupDemo: DEMO && !paymentsEnabled(),
   demoUsers: DEMO ? db.users.filter((u) => u.demo).map((u) => ({ id: u.id, name: u.name, avatar: u.avatar, color: u.color, persona: u.demo, isAdmin: !!u.isAdmin })) : [],
 }), { auth: false });
 // ---------- auth
-POST('/api/auth/otp', ({ body, ip }) => {
+POST('/api/auth/otp', async ({ body, ip }) => {
   const phone = normPhone(body.phone);
   if (!phone) fail(400, 'Enter a valid 10-digit Indian mobile number.');
   rateLimit('otp:' + phone, 5, 10 * 60000); rateLimit('otpip:' + ip, 20, 10 * 60000);
@@ -25,8 +28,13 @@ POST('/api/auth/otp', ({ body, ip }) => {
   if (body.purpose === 'signup' && exists) fail(409, 'This phone number is already registered — one account per phone. Please log in.');
   const code = String(crypto.randomInt(100000, 999999));
   db.otps = db.otps.filter((o) => o.phoneHash !== hmac(phone) && o.exp > now());
-  db.otps.push({ phoneHash: hmac(phone), codeHash: sha(code + phone), exp: now() + 5 * 60000, tries: 0 });
-  console.log(`[otp] ${phone.slice(0, 2)}••••••${phone.slice(-2)} → ${code}`);
+  const otp = { phoneHash: hmac(phone), codeHash: sha(code + phone), exp: now() + 5 * 60000, tries: 0 };
+  db.otps.push(otp);
+  // demo mode shows the code on screen; a real deployment sends it by SMS and never returns or logs it
+  if (DEMO) console.log(`[otp] ${phone.slice(0, 2)}••••••${phone.slice(-2)} → ${code}`);
+  else {
+    try { await sendOtpSms(phone, code); } catch (e) { db.otps = db.otps.filter((o) => o !== otp); throw e; }
+  }
   return { sent: true, expiresIn: 300, demoOtp: DEMO ? code : undefined };
 }, { auth: false });
 POST('/api/auth/signup', ({ body }) => {
@@ -45,11 +53,12 @@ POST('/api/auth/signup', ({ body }) => {
   if (db.users.some((u) => !u.deleted && u.emailHash === hmac(email))) fail(409, 'This college email is already registered.');
   if (db.users.some((u) => !u.deleted && u.phoneHash === hmac(phone))) fail(409, 'This phone number is already registered.');
   checkOtp(phone, body.otp);
-  const isStaff = body.dept === 'Administration' || domain.startsWith('staff.');
+  const isAdmin = !DEMO && ADMIN_PHONES.includes(phone); // real deployments: admins are the phones listed in ADMIN_PHONES
+  const isStaff = isAdmin || body.dept === 'Administration' || domain.startsWith('staff.');
   const ref = body.referral ? db.users.find((u) => u.referralCode === String(body.referral).trim().toUpperCase()) : null;
   const u = makeUser({
     name, email, phone, collegeId, dept: body.dept, year: isStaff ? 'Staff' : String(Math.min(5, Math.max(1, int(body.year) || 1))),
-    role: isStaff ? 'staff' : 'student', residence: body.residence === 'hostel' ? 'hostel' : 'day',
+    role: isStaff ? 'staff' : 'student', isAdmin, residence: body.residence === 'hostel' ? 'hostel' : 'day',
     hostel: body.residence === 'hostel' && locById(body.hostel) ? body.hostel : null,
     bio: clampStr(body.bio, 160), avatar: typeof body.avatar === 'string' && body.avatar.length < 200_000 && body.avatar.startsWith('data:image/') ? body.avatar : null,
     referredBy: ref?.id || null, consent: { terms: true, privacy: true, location: !!body.consent.location, camera: !!body.consent.camera, notifications: !!body.consent.notifications, at: now(), version: '1.0' },
